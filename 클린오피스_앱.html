@@ -1,0 +1,380 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>클린 오피스 — 영업 관리</title>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0}
+:root{--bg:#f4eee3;--panel:#fffaf2;--panel2:#f7efe0;--line:#ecdfc9;--navy:#f7efe0;--blue:#d97706;--blue2:#b45309;--txt:#3a322a;--mut:#8a7d6a;--green:#15803d;--yellow:#b45309;--red:#dc2626}
+body{background:var(--bg);color:var(--txt);font-family:'Malgun Gothic','Apple SD Gothic Neo',sans-serif;font-size:14px}
+.hide{display:none!important}
+input,select,button{font-family:inherit}
+input,select{background:var(--panel2);border:1px solid var(--line);color:var(--txt);border-radius:8px;padding:9px 11px;font-size:13px}
+.btn{background:var(--blue);color:#fff;border:none;border-radius:8px;padding:9px 15px;font-size:13px;cursor:pointer;font-weight:600}
+.btn.sm{padding:5px 10px;font-size:12px}.btn.ghost{background:transparent;border:1px solid var(--line);color:var(--mut)}
+/* center cards (setup/login) */
+.center{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:20px}
+.cardbox{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:28px;width:380px}
+.cardbox h2{color:var(--blue2);font-size:20px;margin-bottom:4px}
+.cardbox p{color:var(--mut);font-size:12.5px;margin-bottom:16px;line-height:1.6}
+.cardbox label{display:block;font-size:12px;color:var(--mut);margin:10px 0 4px}
+.cardbox input{width:100%}
+.cardbox .btn{width:100%;margin-top:16px}
+.err{color:var(--red);font-size:12px;margin-top:10px;min-height:16px}
+/* app shell */
+.app{display:flex;min-height:100vh}
+.side{width:200px;background:#efe7d8;border-right:1px solid #e2d6c2;flex-shrink:0;padding:18px 0}
+.logo{font-size:18px;font-weight:800;color:var(--blue2);padding:0 20px 4px}
+.logo small{display:block;font-size:11px;color:var(--mut);font-weight:400}
+.nav{margin-top:14px}
+.nav a{display:block;padding:10px 20px;color:var(--mut);font-size:13.5px;border-left:3px solid transparent;cursor:pointer}
+.nav a:hover{background:#fff7ec;color:var(--txt)}.nav a.on{background:#fff7ec;color:#b45309;border-left-color:var(--blue);font-weight:600}
+.nav .grp{font-size:11px;color:#5b6675;padding:14px 20px 4px}
+.logout{position:absolute;bottom:14px;left:20px;font-size:12px;color:var(--mut);cursor:pointer}
+.main{flex:1;padding:24px 30px;overflow:auto;max-height:100vh}
+h1{font-size:21px;margin-bottom:2px}.sub{color:var(--mut);font-size:12.5px;margin-bottom:18px}
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(140px,1fr));gap:12px;margin-bottom:22px}
+.card{background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:15px 17px}
+.card.hero{background:#d97706;border-color:#d97706}
+.card .k{font-size:12px;color:var(--mut)}.card .v{font-size:25px;font-weight:800;margin-top:5px}
+.v.b{color:var(--blue2)}.v.g{color:var(--green)}.v.y{color:var(--yellow)}
+.tools{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+table{width:100%;border-collapse:collapse;background:var(--panel);border-radius:12px;overflow:hidden}
+th,td{padding:9px 11px;text-align:left;font-size:13px;border-bottom:1px solid var(--line)}
+th{background:var(--navy);color:#8a7d6a;font-size:12px}
+tr:hover td{background:var(--panel2)}
+.tag{font-size:11px;padding:2px 8px;border-radius:6px;font-weight:600}
+.대형{background:#ffedd5;color:#c2410c}.중형{background:#fef3c7;color:#92400e}.소형{background:#f1ebe0;color:#78716c}.미상{background:#eee;color:#999}
+.st{font-size:12px;border-radius:6px;padding:5px;border:1px solid var(--line);background:var(--panel2);color:var(--txt)}
+.badge{font-size:11px;padding:3px 9px;border-radius:20px;background:var(--panel2);border:1px solid var(--line);color:var(--mut)}
+.badge b{color:var(--blue2)}.badge.g b{color:var(--green)}
+.box{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:16px;margin-bottom:16px}
+.box h3{font-size:14px;margin-bottom:10px;color:var(--blue2)}
+.flex{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
+.del{color:var(--red);cursor:pointer}.link{color:var(--blue2);cursor:pointer}
+.toast{position:fixed;bottom:18px;right:18px;background:var(--green);color:#fff;padding:10px 16px;border-radius:8px;font-size:13px;opacity:0;transition:.3s;pointer-events:none}
+.toast.show{opacity:1}
+.loading{color:var(--mut);padding:40px;text-align:center}
+</style></head>
+<body>
+
+<!-- 1) Supabase 키 설정 -->
+<div id="setup" class="center hide">
+  <div class="cardbox">
+    <h2>클린 오피스</h2>
+    <p>처음 한 번만 연결합니다.<br>Supabase <b>Project Settings → API Keys</b> 에서 <b>"Publishable key"</b>(sb_publishable_…)를 복사해 붙여넣으세요. ※ Secret key는 쓰면 안 돼요. (Project URL은 이미 넣어뒀어요)</p>
+    <label>Publishable key</label>
+    <input id="anonKey" placeholder="sb_publishable_... (또는 eyJ...)">
+    <button class="btn" onclick="saveKey()">연결</button>
+    <div class="err" id="setupErr"></div>
+  </div>
+</div>
+
+<!-- 2) 로그인 -->
+<div id="login" class="center hide">
+  <div class="cardbox">
+    <h2>클린 오피스</h2>
+    <p>청소사업 영업 관리 · 로그인</p>
+    <label>이메일</label><input id="email" type="email" placeholder="가입한 이메일">
+    <label>비밀번호</label><input id="pw" type="password" placeholder="비밀번호" onkeydown="if(event.key==='Enter')doLogin()">
+    <button class="btn" onclick="doLogin()">로그인</button>
+    <div class="err" id="loginErr"></div>
+  </div>
+</div>
+
+<!-- 3) 앱 -->
+<div id="app" class="app hide">
+  <div class="side" style="position:relative">
+    <div class="logo">클린 오피스<small>영업 관리</small></div>
+    <div class="nav" id="nav">
+      <div class="grp">영업</div>
+      <a data-v="dash" class="on">📊 대시보드</a>
+      <a data-v="sales">🎯 영업보드(건물)</a>
+      <a data-v="zones">🗺️ 구역/동선</a>
+      <a data-v="map">📍 지도</a>
+      <div class="grp">고객·정산</div>
+      <a data-v="clients">🏢 계약 호실</a>
+      <a data-v="todo">📌 할일</a>
+    </div>
+    <div class="logout" onclick="doLogout()">로그아웃 →</div>
+  </div>
+  <div class="main" id="view"><div class="loading">불러오는 중…</div></div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const SUPABASE_URL = "https://nivgbvkjuvujofadpcsx.supabase.co";
+const STATUSES = ["미접촉","전단지배포","관리실컨택","견적제출","계약","거절","보류"];
+let sb=null, BUILDINGS=[], UNITAGG={};
+const $=id=>document.getElementById(id);
+const show=id=>{["setup","login","app"].forEach(x=>$(x).classList.toggle("hide",x!==id))};
+function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1600)}
+
+function initClient(){
+  const key=localStorage.getItem("co_anon");
+  if(!key){show("setup");return false}
+  sb=supabase.createClient(SUPABASE_URL,key);
+  return true;
+}
+async function boot(){
+  if(!initClient())return;
+  const {data}=await sb.auth.getSession();
+  if(data && data.session){ showApp() } else { show("login") }
+}
+function saveKey(){
+  const k=$("anonKey").value.trim();
+  if(!(k.startsWith("sb_publishable_")||k.startsWith("eyJ"))){$("setupErr").textContent="키 형식 확인! 'sb_publishable_...' (또는 'eyJ...')로 시작하는 Publishable 키를 붙여넣어 주세요. Secret 키 아님!";return}
+  if(k.startsWith("sb_secret_")){$("setupErr").textContent="그건 Secret 키예요! 위쪽 'Publishable key'를 복사해 주세요.";return}
+  localStorage.setItem("co_anon",k);
+  if(initClient()) show("login");
+}
+async function doLogin(){
+  $("loginErr").textContent="";
+  const email=$("email").value.trim(), password=$("pw").value;
+  const {error}=await sb.auth.signInWithPassword({email,password});
+  if(error){$("loginErr").textContent="로그인 실패: "+error.message;return}
+  showApp();
+}
+async function doLogout(){ await sb.auth.signOut(); show("login") }
+
+async function showApp(){
+  show("app");
+  await loadData();
+  document.querySelectorAll("#nav a").forEach(a=>a.onclick=()=>go(a.dataset.v));
+  go("dash");
+}
+async function loadData(){
+  const b=await sb.from("buildings").select("*").order("zone").order("road");
+  BUILDINGS=b.data||[];
+  const u=await sb.from("units").select("building_id,sales_status");
+  UNITAGG={};
+  (u.data||[]).forEach(x=>{const a=UNITAGG[x.building_id]=UNITAGG[x.building_id]||{n:0,c:0};a.n++;if(x.sales_status==="계약")a.c++});
+}
+const zonesList=()=>[...new Set(BUILDINGS.map(b=>b.zone))];
+
+function go(view,arg){
+  document.querySelectorAll("#nav a").forEach(a=>a.classList.toggle("on",a.dataset.v===view));
+  const V=$("view");
+  if(view==="dash")V.innerHTML=viewDash();
+  else if(view==="sales"){V.innerHTML=viewSales();bindSales()}
+  else if(view==="zones")V.innerHTML=viewZones();
+  else if(view==="map")viewMap();
+  else if(view==="detail")renderDetail(arg);
+  else if(view==="clients")viewClients();
+  else V.innerHTML='<h1>할일</h1><div class="sub">재방문(next_date) 알림 — 다음 단계에서 연결</div><div class="box">🚧 준비중</div>';
+}
+window.go=go;
+
+function viewDash(){
+  let totalUnits=0,contract=0;
+  Object.values(UNITAGG).forEach(a=>{totalUnits+=a.n;contract+=a.c});
+  const big=BUILDINGS.filter(b=>b.size_grade==="대형").length;
+  const zs=zonesList(),mx=Math.max(1,...zs.map(z=>BUILDINGS.filter(b=>b.zone===z).length));
+  const zhtml=zs.map(z=>{const n=BUILDINGS.filter(b=>b.zone===z).length;
+    return `<div class="box" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;padding:12px 16px"><div><b>${z}</b><div style="height:6px;background:var(--panel2);border-radius:4px;margin-top:6px;width:240px"><i style="display:block;height:100%;background:var(--blue);width:${Math.round(n/mx*100)}%"></i></div></div><div style="font-weight:700">${n}곳</div></div>`}).join("");
+  return `<h1>대시보드</h1><div class="sub">건물 ${BUILDINGS.length}개 · 영업/계약은 호실 단위 · 클라우드 저장</div>
+   <div class="cards">
+    <div class="card hero"><div class="k" style="color:#fff;opacity:.92">영업 대상 건물</div><div class="v" style="color:#fff">${BUILDINGS.length}</div></div>
+    <div class="card"><div class="k">대형(우선)</div><div class="v">${big}</div></div>
+    <div class="card"><div class="k">등록 호실</div><div class="v">${totalUnits}</div></div>
+    <div class="card"><div class="k">계약 호실</div><div class="v g">${contract}</div></div>
+   </div>
+   <h1 style="font-size:16px">권역별 건물 수</h1><div class="sub">건물 많은 권역부터 공략</div>${zhtml}`;
+}
+function viewSales(){
+  const zs=zonesList();
+  return `<h1>영업보드 (건물)</h1><div class="sub">건물 클릭 → 호실별 영업·견적·계약 관리</div>
+   <div class="tools">
+    <select id="fz"><option value="">전체 권역</option>${zs.map(z=>`<option>${z}</option>`).join("")}</select>
+    <select id="fg"><option value="">전체 규모</option><option>대형</option><option>중형</option><option>소형</option></select>
+    <input id="fq" placeholder="건물명·주소 검색">
+   </div>
+   <div style="max-height:64vh;overflow:auto"><table><thead><tr><th>권역</th><th>도로</th><th>건물명</th><th>규모</th><th>호실/계약</th><th></th></tr></thead><tbody id="tb"></tbody></table></div>`;
+}
+function bindSales(){["fz","fg","fq"].forEach(id=>{$(id).oninput=renderSalesRows;$(id).onchange=renderSalesRows});renderSalesRows()}
+function renderSalesRows(){
+  const fz=$("fz").value,fg=$("fg").value,fq=($("fq").value||"").trim();
+  const list=BUILDINGS.filter(b=>(!fz||b.zone===fz)&&(!fg||b.size_grade===fg)&&(!fq||(b.name||"").includes(fq)||(b.address||"").includes(fq)));
+  $("tb").innerHTML=list.map(b=>{const a=UNITAGG[b.id]||{n:0,c:0};
+    return `<tr><td>${b.zone}</td><td>${b.road||""}</td><td><b>${b.name}</b><div style="color:var(--mut);font-size:11px">${b.address||""}</div></td>
+     <td><span class="tag ${b.size_grade}">${b.size_grade}</span></td>
+     <td><span class="badge">호실 <b>${a.n}</b></span> <span class="badge g">계약 <b>${a.c}</b></span></td>
+     <td><button class="btn sm" onclick="go('detail','${b.id}')">상세 →</button></td></tr>`}).join("");
+}
+function viewZones(){
+  const zs=zonesList();
+  let h=`<h1>구역 / 동선</h1><div class="sub">권역 → 도로별. 한 번에 한 도로씩.</div>`;
+  zs.forEach(z=>{const items=BUILDINGS.filter(b=>b.zone===z);
+    const roads=[...new Set(items.map(b=>b.road))];
+    let rs=roads.map(rd=>{const bs=items.filter(b=>b.road===rd);
+      return `<div style="background:var(--panel2);padding:7px 14px;color:var(--blue2);font-weight:700;font-size:13px">▶ ${rd||"기타"} (${bs.length})</div>`+
+        bs.map(b=>{const a=UNITAGG[b.id]||{n:0,c:0};return `<div style="padding:6px 14px;border-top:1px solid var(--line);display:flex;justify-content:space-between;font-size:13px"><span class="link" onclick="go('detail','${b.id}')">${b.name}</span><span style="color:var(--mut)"><span class="tag ${b.size_grade}">${b.size_grade}</span> 호실${a.n}·계약${a.c}</span></div>`}).join("")}).join("");
+    h+=`<details class="box" style="padding:0"><summary style="padding:12px 16px;cursor:pointer;font-weight:700">${z} (${items.length}곳)</summary>${rs}</details>`});
+  return h;
+}
+async function renderDetail(bid){
+  const b=BUILDINGS.find(x=>x.id==bid);
+  $("view").innerHTML=`<div class="loading">호실 불러오는 중…</div>`;
+  const {data:units}=await sb.from("units").select("*").eq("building_id",bid).order("created_at");
+  const {data:cts}=await sb.from("building_contacts").select("*").eq("building_id",bid).limit(1);
+  const c=(cts&&cts[0])||{};
+  const urows=(units||[]).map(u=>`<tr data-uid="${u.id}">
+     <td><input value="${u.ho||""}" data-f="ho" style="width:90px"></td>
+     <td><input value="${u.tenant||""}" data-f="tenant" placeholder="입주사" style="width:130px"></td>
+     <td><select class="st" data-f="sales_status">${STATUSES.map(s=>`<option ${s===u.sales_status?"selected":""}>${s}</option>`).join("")}</select></td>
+     <td><input value="${u.memo||""}" data-f="memo" placeholder="담당자·연락처·재방문" style="width:220px"></td>
+     <td><span class="del" data-del="${u.id}">✕</span></td></tr>`).join("");
+  $("view").innerHTML=`<div class="flex" style="justify-content:space-between"><h1>${b.name}</h1><button class="btn ghost sm" onclick="go('sales')">← 목록</button></div>
+   <div class="sub">${b.zone} · ${b.road||""} · <span class="tag ${b.size_grade}">${b.size_grade}</span> · ${b.gross_area? b.gross_area.toLocaleString()+"㎡":""} · ${b.gu} ${b.address||""}</div>
+   <div class="box"><h3>관리실 연락처 (건물)</h3><div class="flex">
+     <input id="cm" value="${c.name||""}" placeholder="관리소장/총무">
+     <input id="cp" value="${c.phone||""}" placeholder="연락처">
+     <input id="cmemo" value="${c.memo||""}" placeholder="메모" style="min-width:240px">
+     <button class="btn sm" onclick="saveContact('${bid}','${c.id||""}')">저장</button></div></div>
+   <div class="box"><div class="flex" style="justify-content:space-between"><h3>호실별 영업 (${(units||[]).length}호실)</h3>
+     <button class="btn sm" onclick="addUnit('${bid}')">+ 호실 추가</button></div>
+     <table><thead><tr><th>호수</th><th>입주사</th><th>영업상태</th><th>메모</th><th></th></tr></thead>
+     <tbody id="ut">${urows||'<tr><td colspan=5 style="color:var(--mut)">호실 없음. "호실 추가"로 시작.</td></tr>'}</tbody></table></div>`;
+  bindDetail(bid);
+}
+function bindDetail(bid){
+  document.querySelectorAll("#ut tr[data-uid]").forEach(tr=>{
+    const uid=tr.dataset.uid;
+    tr.querySelectorAll("[data-f]").forEach(el=>{
+      const h=async()=>{const patch={};patch[el.dataset.f]=el.value;const {error}=await sb.from("units").update(patch).eq("id",uid);if(!error)toast("저장됨");if(el.dataset.f==="sales_status"){await loadData()}};
+      el.tagName==="SELECT"?el.onchange=h:el.onchange=h;
+    });
+    tr.querySelector("[data-del]").onclick=async()=>{await sb.from("units").delete().eq("id",uid);await loadData();renderDetail(bid)};
+  });
+}
+window.addUnit=async(bid)=>{await sb.from("units").insert({building_id:bid,sales_status:"미접촉"});await loadData();renderDetail(bid)};
+window.saveContact=async(bid,cid)=>{const row={building_id:bid,name:$("cm").value,phone:$("cp").value,memo:$("cmemo").value};
+  if(cid){await sb.from("building_contacts").update(row).eq("id",cid)}else{await sb.from("building_contacts").insert(row)}
+  toast("관리실 연락처 저장됨");renderDetail(bid)};
+async function viewClients(){
+  $("view").innerHTML='<h1>계약 호실</h1><div class="sub">상태가 \'계약\'인 호실</div><div class="loading">불러오는 중…</div>';
+  const {data}=await sb.from("units").select("ho,tenant,building_id").eq("sales_status","계약");
+  const bmap={};BUILDINGS.forEach(b=>bmap[b.id]=b);
+  const rows=(data||[]).map(u=>{const b=bmap[u.building_id]||{};return `<tr><td><b>${u.tenant||u.ho||"-"}</b></td><td>${b.name||""}</td><td>${b.zone||""}</td><td>${u.ho||""}</td></tr>`}).join("");
+  $("view").innerHTML=`<h1>계약 호실 (${(data||[]).length})</h1><div class="sub">영업보드에서 상태를 '계약'으로 바꾸면 여기 모입니다</div>
+   ${(data||[]).length?`<table><thead><tr><th>입주사</th><th>건물</th><th>권역</th><th>호수</th></tr></thead><tbody>${rows}</tbody></table>`:'<div class="box">아직 계약 호실이 없습니다.</div>'}`;
+}
+/* ===================== 지도 (카카오맵) ===================== */
+const KAKAO_KEY=()=>localStorage.getItem("co_kakao")||"";
+let COORDS=JSON.parse(localStorage.getItem("co_coords")||"{}");  // building.id -> [lat,lng]
+let kmap=null, kInfo=null, kOverlays=[];
+
+function bstat(b){ // 영업상태 분류 → 색
+  const a=UNITAGG[b.id]||{n:0,c:0};
+  if(a.c>0) return {k:"계약",  c:"#15803d"};
+  if(a.n>0) return {k:"진행중", c:"#d97706"};
+  return       {k:"미접촉", c:"#9ca3af"};
+}
+function cleanAddr(s){ return (s||"").split("(")[0].split(" 외")[0].split(",")[0].trim(); }
+function coordOf(b){ if(b.lat&&b.lng)return [b.lat,b.lng]; if(COORDS[b.id])return COORDS[b.id]; return null; }
+async function persistCoord(id,ll){ try{ await sb.from("buildings").update({lat:ll[0],lng:ll[1]}).eq("id",id); }catch(e){} }
+
+function loadKakao(){
+  return new Promise((res,rej)=>{
+    if(window.kakao&&window.kakao.maps&&window.kakao.maps.services){res();return}
+    const k=KAKAO_KEY(); if(!k){rej("nokey");return}
+    const s=document.createElement("script");
+    s.src=`https://dapi.kakao.com/v2/maps/sdk.js?appkey=${k}&autoload=false&libraries=services`;
+    s.onload=()=>kakao.maps.load(()=>res());
+    s.onerror=()=>rej("loaderr");
+    document.head.appendChild(s);
+  });
+}
+function kakaoSetupHtml(){
+  return `<h1>지도 — 카카오 키 설정</h1><div class="sub">한 번만 설정하면 됩니다 (무료)</div>
+   <div class="box" style="max-width:580px">
+    <p style="color:var(--mut);line-height:1.8;font-size:12.5px">
+    1) <b>developers.kakao.com</b> 로그인 → <b>내 애플리케이션 → 애플리케이션 추가하기</b><br>
+    2) 만든 앱 → <b>앱 키</b>에서 <b>JavaScript 키</b> 복사<br>
+    3) 같은 앱 → <b>플랫폼 → Web 플랫폼 등록</b>에 이 앱의 주소 등록<br>
+    &nbsp;&nbsp;&nbsp;(로컬 테스트는 <b>http://localhost:8000</b>, 배포 후엔 그 도메인)<br>
+    4) 아래에 JavaScript 키 붙여넣기</p>
+    <label style="font-size:12px;color:var(--mut)">JavaScript 키</label>
+    <input id="kkey" placeholder="카카오 JavaScript 키" style="width:100%;margin:6px 0">
+    <button class="btn" onclick="saveKakao()">저장하고 지도 열기</button>
+    <div class="err" id="kerr"></div>
+   </div>`;
+}
+window.saveKakao=()=>{const k=$("kkey").value.trim(); if(!k){$("kerr").textContent="키를 넣어주세요";return} localStorage.setItem("co_kakao",k); go("map");};
+
+function geocodeOne(geocoder,places,b){
+  return new Promise(res=>{
+    const addr=cleanAddr(b.address);
+    const byName=()=>places.keywordSearch(b.name,(d,st)=>{
+      res(st===kakao.maps.services.Status.OK&&d[0] ? [+d[0].y,+d[0].x] : null);
+    });
+    if(addr) geocoder.addressSearch(addr,(d,st)=>{
+      if(st===kakao.maps.services.Status.OK&&d[0]) res([+d[0].y,+d[0].x]); else byName();
+    });
+    else byName();
+  });
+}
+async function ensureCoords(){
+  const miss=BUILDINGS.filter(b=>!coordOf(b));
+  if(!miss.length)return;
+  const geocoder=new kakao.maps.services.Geocoder();
+  const places=new kakao.maps.services.Places();
+  let done=0;
+  for(const b of miss){
+    const ll=await geocodeOne(geocoder,places,b);
+    if(ll){ COORDS[b.id]=ll; persistCoord(b.id,ll); }
+    done++;
+    if($("mstat"))$("mstat").textContent=`좌표 변환 중… ${done}/${miss.length} · 다음부터는 즉시 표시됩니다`;
+    await new Promise(r=>setTimeout(r,60));
+  }
+  localStorage.setItem("co_coords",JSON.stringify(COORDS));
+  if($("mstat"))$("mstat").textContent=`건물 ${BUILDINGS.length}곳 · 핀 클릭 → 호실 영업관리`;
+}
+function drawPins(){
+  kOverlays.forEach(o=>o.setMap(null)); kOverlays=[];
+  const fz=$("mz")?$("mz").value:"";
+  const bounds=new kakao.maps.LatLngBounds(); let shown=0;
+  BUILDINGS.filter(b=>!fz||b.zone===fz).forEach(b=>{
+    const ll=coordOf(b); if(!ll)return;
+    const pos=new kakao.maps.LatLng(ll[0],ll[1]); const st=bstat(b);
+    const el=document.createElement("div");
+    el.style.cssText=`width:14px;height:14px;border-radius:50%;background:${st.c};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);cursor:pointer`;
+    el.title=b.name;
+    el.onclick=()=>{ const a=UNITAGG[b.id]||{n:0,c:0};
+      if(kInfo)kInfo.close();
+      kInfo=new kakao.maps.InfoWindow({removable:true,position:pos,content:
+        `<div style="padding:9px 11px;font-size:12.5px;min-width:160px;line-height:1.6">
+          <b>${b.name}</b><br><span style="color:#999">${b.zone} · ${b.size_grade||""}</span><br>
+          호실 ${a.n} · 계약 ${a.c}<br>
+          <a style="color:#b45309;cursor:pointer;font-weight:700" onclick="go('detail','${b.id}')">상세 영업관리 →</a>
+        </div>`});
+      kInfo.open(kmap);
+    };
+    const ov=new kakao.maps.CustomOverlay({position:pos,content:el,xAnchor:0.5,yAnchor:0.5});
+    ov.setMap(kmap); kOverlays.push(ov); bounds.extend(pos); shown++;
+  });
+  if(shown)kmap.setBounds(bounds);
+}
+async function viewMap(){
+  const V=$("view");
+  if(!KAKAO_KEY()){ V.innerHTML=kakaoSetupHtml(); return; }
+  V.innerHTML=`<div class="flex" style="justify-content:space-between;align-items:flex-start">
+     <div><h1>지도</h1><div class="sub" id="mstat">건물 ${BUILDINGS.length}곳 · 핀 클릭 → 호실 영업관리</div></div>
+     <div class="flex">
+       <select id="mz"><option value="">전체 권역</option>${zonesList().map(z=>`<option>${z}</option>`).join("")}</select>
+       <span class="badge"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#9ca3af;margin-right:5px"></i>미접촉</span>
+       <span class="badge"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#d97706;margin-right:5px"></i>진행중</span>
+       <span class="badge g"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#15803d;margin-right:5px"></i>계약</span>
+     </div></div>
+   <div id="kmap" style="width:100%;height:70vh;border:1px solid var(--line);border-radius:12px"></div>`;
+  try{ await loadKakao(); }
+  catch(e){ if($("mstat"))$("mstat").textContent="지도 로드 실패 — 카카오 키/도메인 등록을 확인하세요.";
+    if(e==="nokey"){V.innerHTML=kakaoSetupHtml();} return; }
+  kmap=new kakao.maps.Map($("kmap"),{center:new kakao.maps.LatLng(37.5045,126.95),level:8});
+  $("mz").onchange=drawPins;
+  await ensureCoords();
+  drawPins();
+}
+
+boot();
+</script></body></html>
