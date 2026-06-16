@@ -32,6 +32,8 @@ input,select{background:var(--panel2);border:1px solid var(--line);color:var(--t
 .nav a:hover{background:#fff7ec;color:var(--txt)}.nav a.on{background:var(--blue);color:#fff;font-weight:600}
 .seg{font-size:12px;padding:5px 11px;border-radius:6px;color:var(--mut);cursor:pointer}
 .seg.on{background:var(--panel);color:var(--txt);font-weight:600}
+.smode{display:inline-block;font-size:13px;padding:6px 18px;border-radius:6px;color:var(--mut);cursor:pointer}
+.smode.on{background:#c2410c;color:#fff;font-weight:600}
 .kpi{background:var(--panel2);border-radius:12px;padding:14px 16px}
 .kl{font-size:12px;color:var(--mut);margin-bottom:6px}.kv{font-size:23px;font-weight:800;display:flex;align-items:baseline;gap:8px}.kv.g{color:var(--green)}.kx{font-size:11px;color:var(--mut);margin-top:5px}
 .chip{font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:#fde7d3;color:#9a3412}.chip.g{background:#e1f3e8;color:#15803d}
@@ -96,7 +98,6 @@ tr:hover td{background:var(--panel2)}
       <div class="grp">영업</div>
       <a data-v="dash" class="on"><i class="ti ti-layout-dashboard"></i>대시보드</a>
       <a data-v="sales"><i class="ti ti-target"></i>영업보드</a>
-      <a data-v="zones"><i class="ti ti-route"></i>구역·동선</a>
       <a data-v="map"><i class="ti ti-map-pin"></i>지도</a>
       <div class="grp">고객·정산</div>
       <a data-v="clients"><i class="ti ti-file-check"></i>계약 호실</a>
@@ -164,7 +165,6 @@ function go(view,arg){
   const V=$("view");
   if(view==="dash")V.innerHTML=viewDash();
   else if(view==="sales"){V.innerHTML=viewSales();bindSales()}
-  else if(view==="zones")V.innerHTML=viewZones();
   else if(view==="map")viewMap();
   else if(view==="detail")renderDetail(arg);
   else if(view==="clients")viewClients();
@@ -221,17 +221,34 @@ function viewDash(){
      </div>
    </div>`;
 }
+let SMODE="list";
 function viewSales(){
+  return `<h1>영업보드</h1><div class="sub">건물 ${BUILDINGS.length}곳 · 클릭하면 호실별 영업·견적·계약 관리</div>
+   <div style="display:flex;gap:3px;background:var(--panel2);border-radius:9px;padding:3px;width:fit-content;margin-bottom:14px">
+     <span class="smode" data-m="list">목록</span><span class="smode" data-m="route">동선</span>
+   </div>
+   <div id="sbody"></div>`;
+}
+function bindSales(){
+  document.querySelectorAll(".smode").forEach(b=>b.onclick=()=>{SMODE=b.dataset.m;renderSMode()});
+  renderSMode();
+}
+function renderSMode(){
+  document.querySelectorAll(".smode").forEach(b=>b.classList.toggle("on",b.dataset.m===SMODE));
+  const body=$("sbody");
+  if(SMODE==="list"){ body.innerHTML=salesListHtml(); bindList(); }
+  else { body.innerHTML=zonesHtml(); }
+}
+function salesListHtml(){
   const zs=zonesList();
-  return `<h1>영업보드 (건물)</h1><div class="sub">건물 클릭 → 호실별 영업·견적·계약 관리</div>
-   <div class="tools">
+  return `<div class="tools">
     <select id="fz"><option value="">전체 권역</option>${zs.map(z=>`<option>${z}</option>`).join("")}</select>
     <select id="fg"><option value="">전체 규모</option><option>대형</option><option>중형</option><option>소형</option></select>
     <input id="fq" placeholder="건물명·주소 검색">
    </div>
-   <div style="max-height:64vh;overflow:auto"><table><thead><tr><th>권역</th><th>도로</th><th>건물명</th><th>규모</th><th>호실/계약</th><th></th></tr></thead><tbody id="tb"></tbody></table></div>`;
+   <div style="max-height:60vh;overflow:auto"><table><thead><tr><th>권역</th><th>도로</th><th>건물명</th><th>규모</th><th>호실/계약</th><th></th></tr></thead><tbody id="tb"></tbody></table></div>`;
 }
-function bindSales(){["fz","fg","fq"].forEach(id=>{$(id).oninput=renderSalesRows;$(id).onchange=renderSalesRows});renderSalesRows()}
+function bindList(){["fz","fg","fq"].forEach(id=>{$(id).oninput=renderSalesRows;$(id).onchange=renderSalesRows});renderSalesRows()}
 function renderSalesRows(){
   const fz=$("fz").value,fg=$("fg").value,fq=($("fq").value||"").trim();
   const list=BUILDINGS.filter(b=>(!fz||b.zone===fz)&&(!fg||b.size_grade===fg)&&(!fq||(b.name||"").includes(fq)||(b.address||"").includes(fq)));
@@ -241,9 +258,9 @@ function renderSalesRows(){
      <td><span class="badge">호실 <b>${a.n}</b></span> <span class="badge g">계약 <b>${a.c}</b></span></td>
      <td><button class="btn sm" onclick="go('detail','${b.id}')">상세 →</button></td></tr>`}).join("");
 }
-function viewZones(){
+function zonesHtml(){
   const zs=zonesList();
-  let h=`<h1>구역 / 동선</h1><div class="sub">권역 → 도로별. 한 번에 한 도로씩.</div>`;
+  let h='<div class="sub" style="margin-top:-4px;margin-bottom:12px">권역 → 도로별. 한 번에 한 도로씩 공략.</div>';
   zs.forEach(z=>{const items=BUILDINGS.filter(b=>b.zone===z);
     const roads=[...new Set(items.map(b=>b.road))];
     let rs=roads.map(rd=>{const bs=items.filter(b=>b.road===rd);
