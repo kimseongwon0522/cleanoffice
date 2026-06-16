@@ -2,6 +2,7 @@
 <html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
 <title>클린 오피스 — 영업 관리</title>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/@tabler/icons-webfont@3/dist/tabler-icons.min.css">
 <style>
 *{box-sizing:border-box;margin:0;padding:0}
 :root{--bg:#f4eee3;--panel:#fffaf2;--panel2:#f7efe0;--line:#ecdfc9;--navy:#f7efe0;--blue:#d97706;--blue2:#b45309;--txt:#3a322a;--mut:#8a7d6a;--green:#15803d;--yellow:#b45309;--red:#dc2626}
@@ -26,8 +27,14 @@ input,select{background:var(--panel2);border:1px solid var(--line);color:var(--t
 .logo{font-size:18px;font-weight:800;color:var(--blue2);padding:0 20px 4px}
 .logo small{display:block;font-size:11px;color:var(--mut);font-weight:400}
 .nav{margin-top:14px;padding:0 10px}
-.nav a{display:block;padding:9px 12px;color:var(--mut);font-size:13.5px;border-radius:8px;cursor:pointer;margin-bottom:2px}
+.nav a{display:flex;align-items:center;gap:9px;padding:9px 12px;color:var(--mut);font-size:13.5px;border-radius:8px;cursor:pointer;margin-bottom:2px}
+.nav a i{font-size:18px}
 .nav a:hover{background:#fff7ec;color:var(--txt)}.nav a.on{background:var(--blue);color:#fff;font-weight:600}
+.seg{font-size:12px;padding:5px 11px;border-radius:6px;color:var(--mut);cursor:pointer}
+.seg.on{background:var(--panel);color:var(--txt);font-weight:600}
+.kpi{background:var(--panel2);border-radius:12px;padding:14px 16px}
+.kl{font-size:12px;color:var(--mut);margin-bottom:6px}.kv{font-size:23px;font-weight:800;display:flex;align-items:baseline;gap:8px}.kv.g{color:var(--green)}.kx{font-size:11px;color:var(--mut);margin-top:5px}
+.chip{font-size:11px;font-weight:600;padding:2px 8px;border-radius:20px;background:#fde7d3;color:#9a3412}.chip.g{background:#e1f3e8;color:#15803d}
 .nav .grp{font-size:11px;color:#5b6675;padding:14px 12px 4px}
 .logout{position:absolute;bottom:14px;left:20px;font-size:12px;color:var(--mut);cursor:pointer}
 .main{flex:1;padding:24px 30px;overflow:auto;max-height:100vh}
@@ -87,13 +94,13 @@ tr:hover td{background:var(--panel2)}
     <div class="logo">클린 오피스<small>영업 관리</small></div>
     <div class="nav" id="nav">
       <div class="grp">영업</div>
-      <a data-v="dash" class="on">📊 대시보드</a>
-      <a data-v="sales">🎯 영업보드(건물)</a>
-      <a data-v="zones">🗺️ 구역/동선</a>
-      <a data-v="map">📍 지도</a>
+      <a data-v="dash" class="on"><i class="ti ti-layout-dashboard"></i>대시보드</a>
+      <a data-v="sales"><i class="ti ti-target"></i>영업보드</a>
+      <a data-v="zones"><i class="ti ti-route"></i>구역·동선</a>
+      <a data-v="map"><i class="ti ti-map-pin"></i>지도</a>
       <div class="grp">고객·정산</div>
-      <a data-v="clients">🏢 계약 호실</a>
-      <a data-v="todo">📌 할일</a>
+      <a data-v="clients"><i class="ti ti-file-check"></i>계약 호실</a>
+      <a data-v="todo"><i class="ti ti-checklist"></i>할일</a>
     </div>
     <div class="logout" onclick="doLogout()">로그아웃 →</div>
   </div>
@@ -168,6 +175,7 @@ window.go=go;
 function viewDash(){
   let totalUnits=0,contract=0;
   Object.values(UNITAGG).forEach(a=>{totalUnits+=a.n;contract+=a.c});
+  const progress=Math.max(0,totalUnits-contract);
   const big=BUILDINGS.filter(b=>b.size_grade==="대형").length;
   const zones=zonesList();
   const zc=zones.map(z=>({z,n:BUILDINGS.filter(b=>b.zone===z).length})).sort((a,b)=>b.n-a.n);
@@ -189,11 +197,16 @@ function viewDash(){
      <div style="font-size:21px;font-weight:800;line-height:1.3;margin-bottom:14px">${topZone.z} 권역 ${topZone.n}곳부터<br>집중 공략해 보세요</div>
      <button class="btn" style="background:#fff;color:#9a3412" onclick="go('sales')">영업보드 열기 →</button>
    </div>
-   <div class="cards">
-    <div class="card hero"><div class="k" style="color:#fff;opacity:.92">영업 대상 건물</div><div class="v" style="color:#fff">${total}</div></div>
-    <div class="card"><div class="k">대형(우선)</div><div class="v">${big}</div></div>
-    <div class="card"><div class="k">등록 호실</div><div class="v">${totalUnits}</div></div>
-    <div class="card"><div class="k">계약 호실</div><div class="v g">${contract}</div></div>
+   <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:12px">
+     <span style="font-size:15px;font-weight:800;color:var(--txt)">주간 영업 현황</span>
+     <div style="display:flex;gap:2px;background:var(--panel2);border-radius:8px;padding:2px">
+       <span class="seg">일</span><span class="seg on">주</span><span class="seg">월</span><span class="seg">년</span>
+     </div>
+   </div>
+   <div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(150px,1fr));gap:12px;margin-bottom:20px">
+     <div class="kpi"><div class="kl">영업 대상 건물</div><div class="kv">${total}<span class="chip">대형 ${big}</span></div><div class="kx">서울 지식산업센터</div></div>
+     <div class="kpi"><div class="kl">진행 중 호실</div><div class="kv">${progress}${progress?`<span class="chip">+${progress}</span>`:""}</div><div class="kx">견적·컨택 진행</div></div>
+     <div class="kpi"><div class="kl">계약 호실</div><div class="kv g">${contract}${contract?`<span class="chip g">+${contract}</span>`:""}</div><div class="kx">정기청소 계약</div></div>
    </div>
    <div style="display:flex;gap:14px;flex-wrap:wrap">
      <div class="box" style="flex:1.4;min-width:280px">
