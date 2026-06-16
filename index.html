@@ -387,22 +387,26 @@ async function ensureCoords(){
   localStorage.setItem("co_coords",JSON.stringify(COORDS));
   if($("mstat"))$("mstat").textContent=`건물 ${BUILDINGS.length}곳 · 핀 클릭 → 호실 영업관리`;
 }
+function unitSize(u){ u=+u||0; if(u>=500)return 28; if(u>=250)return 21; if(u>=100)return 15; return 11; }
 function drawPins(){
   kOverlays.forEach(o=>o.setMap(null)); kOverlays=[];
   const fz=$("mz")?$("mz").value:"";
+  const fu=$("mu")?+$("mu").value:0;
   const bounds=new kakao.maps.LatLngBounds(); let shown=0;
-  BUILDINGS.filter(b=>!fz||b.zone===fz).forEach(b=>{
+  BUILDINGS.filter(b=>(!fz||b.zone===fz)&&((+b.units||0)>=fu)).forEach(b=>{
     const ll=coordOf(b); if(!ll)return;
     const pos=new kakao.maps.LatLng(ll[0],ll[1]); const st=bstat(b);
     const el=document.createElement("div");
-    el.style.cssText=`width:14px;height:14px;border-radius:50%;background:${st.c};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);cursor:pointer`;
+    const sz=unitSize(b.units);
+    el.style.cssText=`width:${sz}px;height:${sz}px;border-radius:50%;background:${st.c};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);cursor:pointer`;
     el.title=b.name;
     el.onclick=()=>{ const a=UNITAGG[b.id]||{n:0,c:0};
       if(kInfo)kInfo.close();
       kInfo=new kakao.maps.InfoWindow({removable:true,position:pos,content:
         `<div style="padding:9px 11px;font-size:12.5px;min-width:160px;line-height:1.6">
           <b>${b.name}</b><br><span style="color:#999">${b.zone} · ${b.size_grade||""}</span><br>
-          호실 ${a.n} · 계약 ${a.c}<br>
+          <span style="color:#555">총 ${b.units?b.units+"호실":"-"} · 지상 ${b.floors||"-"}층${b.floors_b?"/지하"+b.floors_b:""}</span><br>
+          관리 호실 ${a.n} · 계약 ${a.c}<br>
           <a style="color:#b45309;cursor:pointer;font-weight:700" onclick="go('detail','${b.id}')">상세 영업관리 →</a>
         </div>`});
       kInfo.open(kmap);
@@ -419,6 +423,8 @@ async function viewMap(){
      <div><h1>지도</h1><div class="sub" id="mstat">건물 ${BUILDINGS.length}곳 · 핀 클릭 → 호실 영업관리</div></div>
      <div class="flex">
        <select id="mz"><option value="">전체 권역</option>${zonesList().map(z=>`<option>${z}</option>`).join("")}</select>
+       <select id="mu"><option value="0">호실 전체</option><option value="100">100호+</option><option value="250">250호+</option><option value="500">500호+</option></select>
+       <span class="badge" style="color:var(--mut)">핀 크기 = 호실수</span>
        <span class="badge"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#9ca3af;margin-right:5px"></i>미접촉</span>
        <span class="badge"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#d97706;margin-right:5px"></i>진행중</span>
        <span class="badge g"><i style="display:inline-block;width:9px;height:9px;border-radius:50%;background:#15803d;margin-right:5px"></i>계약</span>
@@ -428,7 +434,7 @@ async function viewMap(){
   catch(e){ if($("mstat"))$("mstat").textContent="지도 로드 실패 — 카카오 키/도메인 등록을 확인하세요.";
     if(e==="nokey"){V.innerHTML=kakaoSetupHtml();} return; }
   kmap=new kakao.maps.Map($("kmap"),{center:new kakao.maps.LatLng(37.5045,126.95),level:8});
-  $("mz").onchange=drawPins;
+  $("mz").onchange=drawPins; $("mu").onchange=drawPins;
   await ensureCoords();
   drawPins();
 }
