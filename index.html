@@ -246,16 +246,17 @@ function salesListHtml(){
     <select id="fg"><option value="">전체 규모</option><option>대형</option><option>중형</option><option>소형</option></select>
     <input id="fq" placeholder="건물명·주소 검색">
    </div>
-   <div style="max-height:60vh;overflow:auto"><table><thead><tr><th>권역</th><th>도로</th><th>건물명</th><th>규모</th><th>호실/계약</th><th></th></tr></thead><tbody id="tb"></tbody></table></div>`;
+   <div style="max-height:60vh;overflow:auto"><table><thead><tr><th>권역</th><th>도로</th><th>건물명</th><th>규모</th><th>총호실·층수</th><th>관리/계약</th><th></th></tr></thead><tbody id="tb"></tbody></table></div>`;
 }
 function bindList(){["fz","fg","fq"].forEach(id=>{$(id).oninput=renderSalesRows;$(id).onchange=renderSalesRows});renderSalesRows()}
 function renderSalesRows(){
   const fz=$("fz").value,fg=$("fg").value,fq=($("fq").value||"").trim();
-  const list=BUILDINGS.filter(b=>(!fz||b.zone===fz)&&(!fg||b.size_grade===fg)&&(!fq||(b.name||"").includes(fq)||(b.address||"").includes(fq)));
+  const list=BUILDINGS.filter(b=>(!fz||b.zone===fz)&&(!fg||b.size_grade===fg)&&(!fq||(b.name||"").includes(fq)||(b.address||"").includes(fq))).sort((a,b)=>(+b.units||0)-(+a.units||0));
   $("tb").innerHTML=list.map(b=>{const a=UNITAGG[b.id]||{n:0,c:0};
     return `<tr><td>${b.zone}</td><td>${b.road||""}</td><td><b>${b.name}</b><div style="color:var(--mut);font-size:11px">${b.address||""}</div></td>
      <td><span class="tag ${b.size_grade}">${b.size_grade}</span></td>
-     <td><span class="badge">호실 <b>${a.n}</b></span> <span class="badge g">계약 <b>${a.c}</b></span></td>
+     <td><b style="color:var(--blue2)">${b.units!=null?b.units+"호":"-"}</b><div style="color:var(--mut);font-size:11px">지상 ${b.floors||"-"}층</div></td>
+     <td><span class="badge">관리 <b>${a.n}</b></span> <span class="badge g">계약 <b>${a.c}</b></span></td>
      <td><button class="btn sm" onclick="go('detail','${b.id}')">상세 →</button></td></tr>`}).join("");
 }
 function zonesHtml(){
@@ -265,7 +266,7 @@ function zonesHtml(){
     const roads=[...new Set(items.map(b=>b.road))];
     let rs=roads.map(rd=>{const bs=items.filter(b=>b.road===rd);
       return `<div style="background:var(--panel2);padding:7px 14px;color:var(--blue2);font-weight:700;font-size:13px">▶ ${rd||"기타"} (${bs.length})</div>`+
-        bs.map(b=>{const a=UNITAGG[b.id]||{n:0,c:0};return `<div style="padding:6px 14px;border-top:1px solid var(--line);display:flex;justify-content:space-between;font-size:13px"><span class="link" onclick="go('detail','${b.id}')">${b.name}</span><span style="color:var(--mut)"><span class="tag ${b.size_grade}">${b.size_grade}</span> 호실${a.n}·계약${a.c}</span></div>`}).join("")}).join("");
+        bs.map(b=>{const a=UNITAGG[b.id]||{n:0,c:0};return `<div style="padding:6px 14px;border-top:1px solid var(--line);display:flex;justify-content:space-between;font-size:13px"><span class="link" onclick="go('detail','${b.id}')">${b.name}</span><span style="color:var(--mut)"><span class="tag ${b.size_grade}">${b.size_grade}</span> <b style="color:var(--blue2)">${b.units!=null?b.units+"호":"-"}</b>·관리${a.n}</span></div>`}).join("")}).join("");
     h+=`<details class="box" style="padding:0"><summary style="padding:12px 16px;cursor:pointer;font-weight:700">${z} (${items.length}곳)</summary>${rs}</details>`});
   return h;
 }
@@ -387,7 +388,7 @@ async function ensureCoords(){
   localStorage.setItem("co_coords",JSON.stringify(COORDS));
   if($("mstat"))$("mstat").textContent=`건물 ${BUILDINGS.length}곳 · 핀 클릭 → 호실 영업관리`;
 }
-function unitSize(u){ u=+u||0; if(u>=500)return 28; if(u>=250)return 21; if(u>=100)return 15; return 11; }
+function unitSize(u){ u=+u||0; if(u>=700)return 38; if(u>=350)return 28; if(u>=150)return 20; if(u>=50)return 13; return 9; }
 function drawPins(){
   kOverlays.forEach(o=>o.setMap(null)); kOverlays=[];
   const fz=$("mz")?$("mz").value:"";
