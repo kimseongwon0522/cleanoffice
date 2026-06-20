@@ -202,9 +202,9 @@ async function showApp(){
 async function loadData(){
   const b=await sb.from("buildings").select("*").order("zone").order("road");
   BUILDINGS=b.data||[];
-  const u=await sb.from("units").select("building_id,sales_status");
+  const u=await sb.from("units").select("building_id,sales_status,tenant");
   UNITAGG={};
-  (u.data||[]).forEach(x=>{const a=UNITAGG[x.building_id]=UNITAGG[x.building_id]||{n:0,c:0};a.n++;if(x.sales_status==="계약")a.c++});
+  (u.data||[]).forEach(x=>{const a=UNITAGG[x.building_id]=UNITAGG[x.building_id]||{n:0,c:0,t:""};a.n++;if(x.sales_status==="계약")a.c++;if(x.tenant)a.t+=" "+x.tenant});
 }
 const zonesList=()=>[...new Set(BUILDINGS.map(b=>b.zone))];
 
@@ -287,25 +287,44 @@ function renderSMode(){
   if(SMODE==="list"){ body.innerHTML=salesListHtml(); bindList(); }
   else { body.innerHTML=zonesHtml(); }
 }
+const bSt=b=>{const a=UNITAGG[b.id]||{n:0,c:0};return a.c>0?"계약":(a.n>0?"진행중":"미접촉")};
 function salesListHtml(){
   const zs=zonesList();
   return `<div class="tools">
+    <div style="position:relative;flex:1;min-width:200px"><i class="ti ti-search" style="position:absolute;left:11px;top:50%;transform:translateY(-50%);color:var(--g400);font-size:16px"></i>
+      <input id="fq" placeholder="건물명·주소·입주사 검색" style="width:100%;padding-left:32px"></div>
     <select id="fz"><option value="">전체 권역</option>${zs.map(z=>`<option>${z}</option>`).join("")}</select>
     <select id="fg"><option value="">전체 규모</option><option>대형</option><option>중형</option><option>소형</option></select>
-    <input id="fq" placeholder="건물명·주소 검색">
+    <select id="fs"><option value="">전체 상태</option><option>미접촉</option><option>진행중</option><option>계약</option></select>
+    <select id="fu"><option value="0">호실 전체</option><option value="100">100호+</option><option value="250">250호+</option><option value="500">500호+</option></select>
+    <select id="fy"><option value="">준공 전체</option><option value="2020">2020년~</option><option value="2015">2015~19</option><option value="2010">2010~14</option><option value="old">~2009</option><option value="na">미상</option></select>
+    <select id="fsort"><option value="units">호실 많은순</option><option value="yearnew">준공 최신순</option><option value="yearold">준공 오래된순</option><option value="name">이름순</option></select>
+    <button class="btn ghost sm" onclick="resetSales()"><i class="ti ti-rotate"></i>초기화</button>
    </div>
-   <div style="max-height:60vh;overflow:auto"><table><thead><tr><th>권역</th><th>도로</th><th>건물명</th><th>규모</th><th>총호실·층수</th><th>관리/계약</th><th></th></tr></thead><tbody id="tb"></tbody></table></div>`;
+   <div class="sub" id="rescount" style="margin:-8px 0 12px"></div>
+   <div style="max-height:58vh;overflow:auto"><table><thead><tr><th>권역</th><th>건물명</th><th>규모</th><th>준공</th><th>총호실·층수</th><th>영업상태</th><th></th></tr></thead><tbody id="tb"></tbody></table></div>`;
 }
-function bindList(){["fz","fg","fq"].forEach(id=>{$(id).oninput=renderSalesRows;$(id).onchange=renderSalesRows});renderSalesRows()}
+function bindList(){["fz","fg","fs","fu","fy","fsort","fq"].forEach(id=>{const el=$(id);if(el){el.oninput=renderSalesRows;el.onchange=renderSalesRows}});renderSalesRows()}
+window.resetSales=()=>{["fz","fg","fs","fy"].forEach(id=>{if($(id))$(id).value=""});if($("fu"))$("fu").value="0";if($("fsort"))$("fsort").value="units";if($("fq"))$("fq").value="";renderSalesRows()};
 function renderSalesRows(){
-  const fz=$("fz").value,fg=$("fg").value,fq=($("fq").value||"").trim();
-  const list=BUILDINGS.filter(b=>(!fz||b.zone===fz)&&(!fg||b.size_grade===fg)&&(!fq||(b.name||"").includes(fq)||(b.address||"").includes(fq))).sort((a,b)=>(+b.units||0)-(+a.units||0));
-  $("tb").innerHTML=list.map(b=>{const a=UNITAGG[b.id]||{n:0,c:0};
-    return `<tr><td>${b.zone}</td><td>${b.road||""}</td><td><b>${b.name}</b><div style="color:var(--mut);font-size:11px">${b.address||""}</div></td>
+  const fz=$("fz").value,fg=$("fg").value,fs=$("fs").value,fu=+($("fu").value||0),fy=$("fy").value,srt=$("fsort").value,q=($("fq").value||"").trim().toLowerCase();
+  const yOk=b=>{const y=+b.built_year||0;if(fy==="")return true;if(fy==="na")return !y;if(fy==="old")return y&&y<2010;if(fy==="2010")return y>=2010&&y<2015;if(fy==="2015")return y>=2015&&y<2020;if(fy==="2020")return y>=2020;return true};
+  let list=BUILDINGS.filter(b=>{const a=UNITAGG[b.id]||{n:0,c:0,t:""};
+    return (!fz||b.zone===fz)&&(!fg||b.size_grade===fg)&&(!fs||bSt(b)===fs)&&((+b.units||0)>=fu)&&yOk(b)&&(!q||((b.name||"")+(b.address||"")+(a.t||"")).toLowerCase().includes(q));});
+  list.sort((a,b)=>{
+    if(srt==="name")return (a.name||"").localeCompare(b.name||"");
+    if(srt==="yearnew")return (+b.built_year||0)-(+a.built_year||0);
+    if(srt==="yearold")return (+a.built_year||9999)-(+b.built_year||9999);
+    return (+b.units||0)-(+a.units||0);});
+  $("rescount").innerHTML=`<b style="color:var(--blue2)">${list.length}</b>곳${list.length!==BUILDINGS.length?` <span style="color:var(--g400)">/ 전체 ${BUILDINGS.length}</span>`:""}`;
+  $("tb").innerHTML=list.map(b=>{const a=UNITAGG[b.id]||{n:0,c:0};const st=bSt(b);const y=+b.built_year||0;
+    const sc=st==="계약"?"var(--green)":st==="진행중"?"var(--blue)":"var(--g400)";
+    return `<tr><td>${b.zone}</td><td><b>${b.name}</b><div style="color:var(--mut);font-size:11px">${b.address||""}</div></td>
      <td><span class="tag ${b.size_grade}">${b.size_grade}</span></td>
+     <td>${y?y+"":'<span style="color:var(--g400)">미상</span>'}</td>
      <td><b style="color:var(--blue2)">${b.units!=null?b.units+"호":"-"}</b><div style="color:var(--mut);font-size:11px">지상 ${b.floors||"-"}층</div></td>
-     <td><span class="badge">관리 <b>${a.n}</b></span> <span class="badge g">계약 <b>${a.c}</b></span></td>
-     <td><button class="btn sm" onclick="go('detail','${b.id}')">상세 →</button></td></tr>`}).join("");
+     <td><span style="color:${sc};font-size:13px;vertical-align:1px">●</span> <span style="font-weight:600;font-size:12.5px">${st}</span> <span style="color:var(--g400);font-size:11px">관리${a.n}·계약${a.c}</span></td>
+     <td><button class="btn sm" onclick="go('detail','${b.id}')">상세</button></td></tr>`}).join("")||'<tr><td colspan=7 style="color:var(--mut);text-align:center;padding:30px">조건에 맞는 건물이 없어요. <span class="link" onclick="resetSales()">필터 초기화</span></td></tr>';
 }
 function zonesHtml(){
   const zs=zonesList();
