@@ -52,6 +52,7 @@ textarea{min-height:72px;resize:vertical}
 .btns .call{background:var(--clay);color:#fff}
 .btns .kakao{background:#FEE500;color:#3c1e1e}
 .err{color:#c0392b;font-size:13px;text-align:center;margin-top:10px;display:none}
+.hp{position:absolute;left:-9999px;width:1px;height:1px;overflow:hidden}
 </style>
 </head>
 <body>
@@ -63,19 +64,25 @@ textarea{min-height:72px;resize:vertical}
 
 <div class="wrap">
   <form id="f" class="card" autocomplete="on">
+    <!-- 허니팟: 사람에겐 안 보이고 봇만 채움 (채워지면 무시) -->
+    <div class="hp" aria-hidden="true">
+      <label>회사 홈페이지</label>
+      <input type="text" name="website" tabindex="-1" autocomplete="off">
+    </div>
+
     <label>업체명 / 담당자명 <span class="req">*</span></label>
-    <input name="company" placeholder="예) (주)클린상사 / 김성원" required>
+    <input name="company" maxlength="60" placeholder="예) (주)클린상사 / 김성원" required>
 
     <label>연락처 <span class="req">*</span></label>
-    <input name="phone" type="tel" inputmode="tel" placeholder="010-0000-0000" required>
+    <input name="phone" type="tel" inputmode="tel" maxlength="20" placeholder="010-0000-0000" required>
 
     <label>주소 (지식산업센터·호실) <span class="req">*</span></label>
-    <input name="address" placeholder="예) 가산동 ○○지산 1503호" required>
+    <input name="address" maxlength="120" placeholder="예) 가산동 ○○지산 1503호" required>
 
     <div class="row">
       <div>
         <label>면적 (평)</label>
-        <input name="area" type="number" inputmode="numeric" placeholder="예) 25">
+        <input name="area" type="number" inputmode="numeric" min="0" max="100000" placeholder="예) 25">
       </div>
       <div>
         <label>청소 주기</label>
@@ -98,7 +105,7 @@ textarea{min-height:72px;resize:vertical}
     </div>
 
     <label>요청사항</label>
-    <textarea name="message" placeholder="예) 탕비실 위생 신경 써주세요 / 주말 작업 가능 문의"></textarea>
+    <textarea name="message" maxlength="500" placeholder="예) 탕비실 위생 신경 써주세요 / 주말 작업 가능 문의"></textarea>
 
     <button class="submit" type="submit" id="btn">견적 문의하기</button>
     <div class="err" id="err"></div>
@@ -135,6 +142,8 @@ const sb = supabase.createClient(SUPABASE_URL, SUPABASE_KEY);
 
 // 출처 추적: ?src=qr / flyer / naver / blog ...
 const src = new URLSearchParams(location.search).get("src") || "qr";
+const startedAt = Date.now();           // 시간함정 기준
+let submitting = false;                 // 중복제출 방지
 
 // 청소 유형 멀티 선택
 const picked = new Set();
@@ -145,29 +154,50 @@ document.getElementById("types").addEventListener("click", e=>{
 });
 
 const f = document.getElementById("f"), btn = document.getElementById("btn"), err = document.getElementById("err");
+const done = document.getElementById("done");
+function showDone(){ f.style.display="none"; done.style.display="block"; window.scrollTo({top:0, behavior:"smooth"}); }
+
+// 브라우저당 횟수제한: 1시간 5회
+function recentTimes(){ try{return JSON.parse(localStorage.getItem("co_q_times")||"[]").filter(t=>Date.now()-t<3600000)}catch(e){return[]} }
+function markSubmitted(){ const a=recentTimes(); a.push(Date.now()); localStorage.setItem("co_q_times",JSON.stringify(a)); }
+
 f.addEventListener("submit", async (e)=>{
   e.preventDefault();
+  if(submitting) return;
   err.style.display="none";
-  btn.disabled=true; btn.textContent="접수 중...";
+
+  // ① 허니팟: 숨은 칸이 채워졌으면 봇 → 조용히 성공처럼 처리(저장 안 함)
+  if(f.website && f.website.value.trim()){ showDone(); return; }
+  // ② 시간함정: 3초 미만 제출은 봇 → 조용히 무시
+  if(Date.now() - startedAt < 3000){ showDone(); return; }
+  // ③ 횟수제한
+  if(recentTimes().length >= 5){
+    err.textContent="문의가 여러 번 접수됐어요. 잠시 후 다시 시도하시거나 전화(010-9001-6067) 주세요.";
+    err.style.display="block"; return;
+  }
+  // ④ 연락처 간단 검증(숫자 9개 이상)
+  const phoneDigits = (f.phone.value.match(/\d/g)||[]).length;
+  if(phoneDigits < 9){ err.textContent="연락처를 정확히 입력해 주세요."; err.style.display="block"; f.phone.focus(); return; }
+
+  submitting = true; btn.disabled=true; btn.textContent="접수 중...";
   const d = Object.fromEntries(new FormData(f).entries());
   const row = {
-    company: d.company?.trim(),
-    phone: d.phone?.trim(),
-    address: d.address?.trim(),
-    area_pyeong: d.area ? parseInt(d.area,10) : null,
+    company: (d.company||"").trim().slice(0,100),
+    phone: (d.phone||"").trim().slice(0,20),
+    address: (d.address||"").trim().slice(0,200),
+    area_pyeong: d.area ? Math.min(parseInt(d.area,10)||0, 100000) : null,
     frequency: d.frequency || null,
-    clean_type: [...picked].join(", ") || null,
-    message: d.message?.trim() || null,
+    clean_type: [...picked].join(", ").slice(0,200) || null,
+    message: (d.message||"").trim().slice(0,1000) || null,
     source: src
   };
   try{
     const { error } = await sb.from("leads").insert(row);
     if(error) throw error;
-    f.style.display="none";
-    document.getElementById("done").style.display="block";
-    window.scrollTo({top:0, behavior:"smooth"});
+    markSubmitted();
+    showDone();
   }catch(ex){
-    btn.disabled=false; btn.textContent="견적 문의하기";
+    submitting=false; btn.disabled=false; btn.textContent="견적 문의하기";
     err.textContent="전송에 실패했어요. 전화(010-9001-6067)로 문의 주시면 바로 도와드릴게요.";
     err.style.display="block";
     console.error(ex);
