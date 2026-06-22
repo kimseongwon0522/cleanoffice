@@ -82,10 +82,11 @@ tr:hover td{background:var(--panel2)}
 <div id="login" class="center hide">
   <div class="cardbox">
     <h2>클린 오피스</h2>
-    <p>청소사업 영업 관리 · 로그인</p>
-    <label>이메일</label><input id="email" type="email" placeholder="가입한 이메일">
-    <label>비밀번호</label><input id="pw" type="password" placeholder="비밀번호" onkeydown="if(event.key==='Enter')doLogin()">
+    <p>사장님은 <b>로그인</b>, 알바는 <b>회원가입</b> 후 이용하세요.</p>
+    <label>이메일</label><input id="email" type="email" placeholder="이메일">
+    <label>비밀번호</label><input id="pw" type="password" placeholder="비밀번호 (6자 이상)" onkeydown="if(event.key==='Enter')doLogin()">
     <button class="btn" onclick="doLogin()">로그인</button>
+    <button class="btn ghost" style="margin-top:8px" onclick="doSignup()">회원가입 (알바 신규)</button>
     <div class="err" id="loginErr"></div>
   </div>
 </div>
@@ -143,6 +144,15 @@ async function doLogin(){
   const {error}=await sb.auth.signInWithPassword({email,password});
   if(error){$("loginErr").textContent="로그인 실패: "+error.message;return}
   showApp();
+}
+async function doSignup(){
+  $("loginErr").style.color=""; $("loginErr").textContent="";
+  const email=$("email").value.trim(), password=$("pw").value;
+  if(!email || password.length<6){ $("loginErr").textContent="이메일과 6자 이상 비밀번호를 입력하세요."; return; }
+  const {data,error}=await sb.auth.signUp({email,password});
+  if(error){ $("loginErr").textContent="가입 실패: "+error.message; return; }
+  if(data.session){ showApp(); }   // 메일확인 꺼져있으면 바로 입장
+  else { $("loginErr").style.color="var(--green)"; $("loginErr").textContent="가입 완료! 인증 메일이 오면 확인 후, 다시 로그인하면 됩니다."; }
 }
 async function doLogout(){ await sb.auth.signOut(); show("login") }
 
