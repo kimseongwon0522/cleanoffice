@@ -116,32 +116,70 @@ function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");set
 function hav(a,b){const R=6371,dLa=(b.la-a.la)*Math.PI/180,dLn=(b.ln-a.ln)*Math.PI/180,
  x=Math.sin(dLa/2)**2+Math.cos(a.la*Math.PI/180)*Math.cos(b.la*Math.PI/180)*Math.sin(dLn/2)**2;
  return 2*R*Math.asin(Math.sqrt(x));}
-
-function gen(){
- const miOnly=$("pMi").classList.contains("on") && !$("pProg").classList.contains("on");
- let pool=ALL.filter(b=> $("pProg").classList.contains("on") ? b.s!=="계약" : (miOnly? b.s==="미접촉" : b.s!=="계약"));
- const pri=$("pri").value, cnt=+$("cnt").value;
- // 출발점: 호실 최다
- let start=pool.slice().sort((a,b)=>b.u-a.u)[0];
- // 최근접 이웃
- let rem=pool.filter(b=>b!==start), order=[start], cur=start;
- while(rem.length){
-   rem.sort((a,b)=>{
-     let da=hav(cur,a), db=hav(cur,b);
-     if(pri==="units"){ da/= (1+a.u/2000); db/=(1+b.u/2000); }
-     return da-db;
-   });
-   cur=rem.shift(); order.push(cur);
+function nnOrder(stops,d){ // d(i,j) indices into stops
+ let start=0; stops.forEach((b,i)=>{if(b.u>stops[start].u)start=i});
+ const used=new Set([start]), order=[start]; let cur=start;
+ while(order.length<stops.length){ let best=-1,bd=Infinity;
+   for(let j=0;j<stops.length;j++) if(!used.has(j)){const dd=d(cur,j); if(dd<bd){bd=dd;best=j;}}
+   used.add(best); order.push(best); cur=best;
+ } return order;
+}
+function twoOpt(order,d){ let improved=true,guard=0;
+ while(improved && guard++<60){ improved=false;
+   for(let i=1;i<order.length-1;i++) for(let k=i+1;k<order.length;k++){
+     const a=order[i-1],b=order[i],c=order[k],e=order[k+1];
+     const before=d(a,b)+(e!==undefined?d(c,e):0);
+     const after=d(a,c)+(e!==undefined?d(b,e):0);
+     if(after+1e-6<before){ const seg=order.slice(i,k+1).reverse(); order.splice(i,seg.length,...seg); improved=true; }
+   }
+ } return order;
+}
+async function drivingMatrix(stops,onProg){
+ const n=stops.length, M=Array.from({length:n},()=>Array(n).fill(0));
+ const pairs=[]; for(let i=0;i<n;i++)for(let j=i+1;j<n;j++)pairs.push([i,j]);
+ let dn=0;
+ async function one(p){ const [i,j]=p;
+   try{ const url=`https://apis-navi.kakaomobility.com/v1/directions?origin=${stops[i].ln},${stops[i].la}&destination=${stops[j].ln},${stops[j].la}&priority=DISTANCE`;
+     const r=await fetch(url,{headers:{Authorization:"KakaoAK "+KKEY}}); const d=await r.json(); const rt=d.routes&&d.routes[0];
+     const m=(rt&&rt.summary&&rt.summary.distance)|| hav(stops[i],stops[j])*1000; M[i][j]=M[j][i]=m;
+   }catch(e){ M[i][j]=M[j][i]=hav(stops[i],stops[j])*1000; }
+   dn++; if(onProg)onProg(dn,pairs.length);
  }
- ROUTE=order.slice(0,cnt); done.clear();
+ for(let k=0;k<pairs.length;k+=5){ await Promise.all(pairs.slice(k,k+5).map(one)); }
+ return M;
+}
+
+async function gen(){
+ const incProg=$("pProg").classList.contains("on");
+ let pool=ALL.filter(b=> incProg ? b.s!=="계약" : b.s==="미접촉");
+ const pri=$("pri").value, cnt=+$("cnt").value;
+ if(!pool.length){ toast("대상 건물이 없어요"); return; }
+ // 1) 후보 선택: 가중 직선 NN으로 cnt곳 추림 (호실 많은 순이면 큰 건물 가중)
+ const wHav=(i,j)=> hav(pool[i],pool[j]) * (pri==="units"? 1/(1+pool[j].u/2000):1);
+ const sel=nnOrder(pool,wHav).slice(0,Math.min(cnt,pool.length));
+ ROUTE=sel.map(i=>pool[i]); done.clear();
  $("rttl").textContent=`가산 동선 · ${ROUTE.length}곳`;
- $("setup").style.display="none"; $("result").style.display="block";
- renderList(); updateProg(); window.scrollTo(0,0);
+ $("rcap").textContent="가산 동선";
+ $("setup").style.display="none"; $("result").style.display="block"; window.scrollTo(0,0);
+ renderList(); updateProg();
+ // 2) 순서 최적화
+ if(MODE==="차량" && ROUTE.length>=3 && ROUTE.length<=12){
+   $("rmeta").textContent="실거리 최적화 준비…"; $("sum").innerHTML="실거리 행렬 계산 중…";
+   try{
+     const M=await drivingMatrix(ROUTE,(k,t)=>{$("rmeta").textContent=`실거리 최적화 중… ${k}/${t}`;});
+     const dM=(i,j)=>M[i][j];
+     ROUTE=twoOpt(nnOrder(ROUTE,dM),dM).map(i=>ROUTE[i]);
+   }catch(e){ const dH=(i,j)=>hav(ROUTE[i],ROUTE[j]); ROUTE=twoOpt(nnOrder(ROUTE,dH),dH).map(i=>ROUTE[i]); }
+ } else {
+   const dH=(i,j)=>hav(ROUTE[i],ROUTE[j]);
+   ROUTE=twoOpt(nnOrder(ROUTE,dH),dH).map(i=>ROUTE[i]);
+ }
+ done.clear(); renderList(); updateProg();
  applyRoute();
 }
 
 function renderList(){
- $("sum").innerHTML=`총 <b>${ROUTE.length}곳</b> · 호실 많은 큰 건물부터 효율 순서로`;
+ $("sum").innerHTML=`총 <b>${ROUTE.length}곳</b> · 효율 순서`;
  $("list").innerHTML=ROUTE.map((b,i)=>{
    const dn=done.has(i);
    return `<div class="stop ${dn?'done':''} ${(!dn && i===firstUndone())?'cur':''}">
@@ -181,8 +219,9 @@ function drawLine(pts,color,dash){ if(kline)kline.setMap(null);
 function straightFallback(){
  let dist=0; for(let i=1;i<ROUTE.length;i++) dist+=hav(ROUTE[i-1],ROUTE[i]);
  drawLine(ROUTE.map(b=>new kakao.maps.LatLng(b.la,b.ln)),"#9aa0a6",true);
- const mins=Math.round(ROUTE.length*5 + dist/0.067);
- $("rmeta").textContent=`🚶 도보(추정) ${dist.toFixed(1)}km · 약 ${mins}분`;
+ const mins=Math.round(dist/0.067);
+ $("rmeta").textContent=`🚶 도보(직선 추정) ${dist.toFixed(1)}km · 약 ${mins}분`;
+ $("sum").innerHTML=`총 <b>${ROUTE.length}곳</b> · 직선 추정(도보 정밀경로 아님)`;
 }
 function applyRoute(){
  $("rmeta").textContent="경로 계산 중…";
