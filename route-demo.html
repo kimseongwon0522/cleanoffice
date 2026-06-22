@@ -63,6 +63,8 @@ select{font-family:inherit;font-size:13px;border:1px solid var(--g300);border-ra
       <div><div class="lab">개수</div><select id="cnt"><option value="8">8곳</option><option value="12" selected>12곳</option><option value="20">20곳</option><option value="99">제한 없음</option></select></div>
       <div><div class="lab">우선순위</div><select id="pri"><option value="near">가까운 순</option><option value="units">호실 많은 순</option></select></div>
     </div></div>
+    <div class="sec"><div class="lab">하루 호실 상한 (알바 배정)</div>
+      <select id="cap"><option value="0">없음</option><option value="1500" selected>호실 합계 1,500 미만</option><option value="2000">호실 합계 2,000 미만</option><option value="3000">호실 합계 3,000 미만</option></select></div>
     <button class="btn" onclick="gen()">🧭 동선 생성</button>
     <div class="note">데모: 실제 가산 지식산업센터 좌표로 동작합니다.</div>
   </div>
@@ -159,12 +161,20 @@ async function walkMatrix(stops){ // OSRM table: 보행 거리행렬 1회 호출
 async function gen(){
  const incProg=$("pProg").classList.contains("on");
  let pool=ALL.filter(b=> incProg ? b.s!=="계약" : b.s==="미접촉");
- const pri=$("pri").value, cnt=+$("cnt").value;
+ const pri=$("pri").value, cnt=+$("cnt").value, cap=+($("cap")?$("cap").value:0);
+ if(cap>0) pool=pool.filter(b=>b.u<=cap); // 혼자 상한 넘는 대형건물 제외(알바엔 안 줌)
  if(!pool.length){ toast("대상 건물이 없어요"); return; }
- // 1) 후보 선택: 가중 직선 NN으로 cnt곳 추림 (호실 많은 순이면 큰 건물 가중)
+ // 1) 후보 선택: 가중 직선 NN 순서 → 개수/호실합계 상한까지 담기
  const wHav=(i,j)=> hav(pool[i],pool[j]) * (pri==="units"? 1/(1+pool[j].u/2000):1);
- const sel=nnOrder(pool,wHav).slice(0,Math.min(cnt,pool.length));
- ROUTE=sel.map(i=>pool[i]); done.clear();
+ const order=nnOrder(pool,wHav);
+ let pick=[], usum=0;
+ for(const idx of order){
+   if(pick.length>=cnt) break;
+   if(cap>0 && usum+pool[idx].u>cap) continue; // 합계 넘으면 건너뛰고 더 작은 것 시도
+   pick.push(idx); usum+=pool[idx].u;
+ }
+ if(!pick.length) pick=[order[0]];
+ ROUTE=pick.map(i=>pool[i]); done.clear();
  $("rttl").textContent=`가산 동선 · ${ROUTE.length}곳`;
  $("rcap").textContent="가산 동선";
  $("setup").style.display="none"; $("result").style.display="block"; window.scrollTo(0,0);
@@ -193,7 +203,7 @@ async function gen(){
 }
 
 function renderList(){
- $("sum").innerHTML=`총 <b>${ROUTE.length}곳</b> · 효율 순서`;
+ $("sum").innerHTML=`총 <b>${ROUTE.length}곳</b> · 호실 합계 <b>${ROUTE.reduce((s,b)=>s+b.u,0).toLocaleString()}</b> · 효율 순서`;
  $("list").innerHTML=ROUTE.map((b,i)=>{
    const dn=done.has(i);
    return `<div class="stop ${dn?'done':''} ${(!dn && i===firstUndone())?'cur':''}">
@@ -235,7 +245,7 @@ function straightFallback(){
  drawLine(ROUTE.map(b=>new kakao.maps.LatLng(b.la,b.ln)),"#9aa0a6",true);
  const mins=Math.round(dist/0.067);
  $("rmeta").textContent=`🚶 도보(직선 추정) ${dist.toFixed(1)}km · 약 ${mins}분`;
- $("sum").innerHTML=`총 <b>${ROUTE.length}곳</b> · 직선 추정(도보 정밀경로 아님)`;
+ $("sum").innerHTML=`총 <b>${ROUTE.length}곳</b> · 호실 합계 <b>${ROUTE.reduce((s,b)=>s+b.u,0).toLocaleString()}</b> · 직선 추정`;
 }
 function applyRoute(){
  $("rmeta").textContent="경로 계산 중…";
@@ -252,7 +262,7 @@ function applyRoute(){
          rt.sections.forEach(s=>s.roads&&s.roads.forEach(rd=>{for(let i=0;i<rd.vertexes.length;i+=2)path.push(new kakao.maps.LatLng(rd.vertexes[i+1],rd.vertexes[i]));}));
          drawLine(path,"#bd5f37",false);
          $("rmeta").textContent=`🚗 차량 ${(rt.summary.distance/1000).toFixed(1)}km · ${Math.round(rt.summary.duration/60)}분 · 실도로`;
-         $("sum").innerHTML=`총 <b>${ROUTE.length}곳</b> · 실제 도로 기준 경로`;
+         $("sum").innerHTML=`총 <b>${ROUTE.length}곳</b> · 호실 합계 <b>${ROUTE.reduce((s,b)=>s+b.u,0).toLocaleString()}</b> · 실도로`;
          return;
        }
      }catch(e){}
@@ -266,7 +276,7 @@ function applyRoute(){
          const path=rt.geometry.coordinates.map(c=>new kakao.maps.LatLng(c[1],c[0]));
          drawLine(path,"#5f7a4a",false);
          $("rmeta").textContent=`🚶 도보 ${(rt.distance/1000).toFixed(1)}km · ${Math.round(rt.duration/60)}분 · 실보행`;
-         $("sum").innerHTML=`총 <b>${ROUTE.length}곳</b> · 실제 보행로 기준`;
+         $("sum").innerHTML=`총 <b>${ROUTE.length}곳</b> · 호실 합계 <b>${ROUTE.reduce((s,b)=>s+b.u,0).toLocaleString()}</b> · 실보행로`;
          return;
        }
      }catch(e){}
