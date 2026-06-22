@@ -58,7 +58,7 @@ select{font-family:inherit;font-size:13px;border:1px solid var(--g300);border-ra
     <div class="sec"><div class="lab">대상</div>
       <div class="pills"><span class="pill on" id="pMi">미접촉</span><span class="pill" id="pProg">진행중 포함</span></div></div>
     <div class="sec"><div class="lab">이동수단</div>
-      <div class="pills"><span class="pill on" id="mCar">🚗 차량 (실도로)</span><span class="pill" id="mFoot">🚶 도보 (추정)</span></div></div>
+      <div class="pills"><span class="pill on" id="mCar">🚗 차량 (실도로)</span><span class="pill" id="mFoot">🚶 도보 (실보행)</span></div></div>
     <div class="sec"><div class="row">
       <div><div class="lab">개수</div><select id="cnt"><option value="8">8곳</option><option value="12" selected>12곳</option><option value="20">20곳</option><option value="99">제한 없음</option></select></div>
       <div><div class="lab">우선순위</div><select id="pri"><option value="near">가까운 순</option><option value="units">호실 많은 순</option></select></div>
@@ -111,6 +111,7 @@ let MODE="차량";
 $("mCar").onclick=()=>{MODE="차량";$("mCar").classList.add("on");$("mFoot").classList.remove("on");};
 $("mFoot").onclick=()=>{MODE="도보";$("mFoot").classList.add("on");$("mCar").classList.remove("on");};
 const KKEY="eccf87b9aa3b6731a58f6ee47003ec3e";
+const OSRM="https://routing.openstreetmap.de/routed-foot";
 function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1600)}
 
 function hav(a,b){const R=6371,dLa=(b.la-a.la)*Math.PI/180,dLn=(b.ln-a.ln)*Math.PI/180,
@@ -148,6 +149,12 @@ async function drivingMatrix(stops,onProg){
  for(let k=0;k<pairs.length;k+=5){ await Promise.all(pairs.slice(k,k+5).map(one)); }
  return M;
 }
+async function walkMatrix(stops){ // OSRM table: 보행 거리행렬 1회 호출
+ const coords=stops.map(b=>b.ln+","+b.la).join(";");
+ const d=await fetch(OSRM+"/table/v1/driving/"+coords+"?annotations=distance").then(r=>r.json());
+ if(d.code!=="Ok"||!d.distances) throw new Error("walk table fail");
+ return d.distances;
+}
 
 async function gen(){
  const incProg=$("pProg").classList.contains("on");
@@ -167,6 +174,13 @@ async function gen(){
    $("rmeta").textContent="실거리 최적화 준비…"; $("sum").innerHTML="실거리 행렬 계산 중…";
    try{
      const M=await drivingMatrix(ROUTE,(k,t)=>{$("rmeta").textContent=`실거리 최적화 중… ${k}/${t}`;});
+     const dM=(i,j)=>M[i][j];
+     ROUTE=twoOpt(nnOrder(ROUTE,dM),dM).map(i=>ROUTE[i]);
+   }catch(e){ const dH=(i,j)=>hav(ROUTE[i],ROUTE[j]); ROUTE=twoOpt(nnOrder(ROUTE,dH),dH).map(i=>ROUTE[i]); }
+ } else if(MODE==="도보" && ROUTE.length>=3){
+   $("rmeta").textContent="보행 경로 최적화 중…"; $("sum").innerHTML="보행 거리 계산 중…";
+   try{
+     const M=await walkMatrix(ROUTE);
      const dM=(i,j)=>M[i][j];
      ROUTE=twoOpt(nnOrder(ROUTE,dM),dM).map(i=>ROUTE[i]);
    }catch(e){ const dH=(i,j)=>hav(ROUTE[i],ROUTE[j]); ROUTE=twoOpt(nnOrder(ROUTE,dH),dH).map(i=>ROUTE[i]); }
@@ -239,6 +253,20 @@ function applyRoute(){
          drawLine(path,"#bd5f37",false);
          $("rmeta").textContent=`🚗 차량 ${(rt.summary.distance/1000).toFixed(1)}km · ${Math.round(rt.summary.duration/60)}분 · 실도로`;
          $("sum").innerHTML=`총 <b>${ROUTE.length}곳</b> · 실제 도로 기준 경로`;
+         return;
+       }
+     }catch(e){}
+   }
+   if(MODE==="도보" && ROUTE.length>=2){
+     try{
+       const coords=ROUTE.map(b=>b.ln+","+b.la).join(";");
+       const d=await fetch(OSRM+"/route/v1/driving/"+coords+"?overview=full&geometries=geojson").then(r=>r.json());
+       const rt=d.routes&&d.routes[0];
+       if(d.code==="Ok"&&rt){
+         const path=rt.geometry.coordinates.map(c=>new kakao.maps.LatLng(c[1],c[0]));
+         drawLine(path,"#5f7a4a",false);
+         $("rmeta").textContent=`🚶 도보 ${(rt.distance/1000).toFixed(1)}km · ${Math.round(rt.duration/60)}분 · 실보행`;
+         $("sum").innerHTML=`총 <b>${ROUTE.length}곳</b> · 실제 보행로 기준`;
          return;
        }
      }catch(e){}
