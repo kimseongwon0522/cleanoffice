@@ -613,7 +613,7 @@ async function applyRouteMap(){
   if(RMODE==="차량" && RROUTE.length>=2){
     try{
       const body={origin:{x:RROUTE[0].ln,y:RROUTE[0].la},destination:{x:RROUTE[RROUTE.length-1].ln,y:RROUTE[RROUTE.length-1].la},waypoints:RROUTE.slice(1,-1).map(b=>({x:b.ln,y:b.la})),priority:"RECOMMEND"};
-      const r=await fetch("https://apis-navi.kakaomobility.com/v1/waypoints/directions",{method:"POST",headers:{Authorization:"KakaoAK "+KMOB,"Content-Type":"application/json"},body:JSON.stringify(body)});
+      const r=await tfetch("https://apis-navi.kakaomobility.com/v1/waypoints/directions",{method:"POST",headers:{Authorization:"KakaoAK "+KMOB,"Content-Type":"application/json"},body:JSON.stringify(body)},12000);
       const d=await r.json(); const rt=d.routes&&d.routes[0];
       if(rt&&rt.result_code===0){
         const path=[]; rt.sections.forEach(s=>s.roads&&s.roads.forEach(rd=>{for(let i=0;i<rd.vertexes.length;i+=2)path.push(new kakao.maps.LatLng(rd.vertexes[i+1],rd.vertexes[i]));}));
@@ -627,7 +627,7 @@ async function applyRouteMap(){
   if(RMODE==="도보" && RROUTE.length>=2){
     try{
       const coords=RROUTE.map(b=>b.ln+","+b.la).join(";");
-      const d=await fetch(OSRM+"/route/v1/driving/"+coords+"?overview=full&geometries=geojson").then(r=>r.json());
+      const d=await tfetch(OSRM+"/route/v1/driving/"+coords+"?overview=full&geometries=geojson",{},9000).then(r=>r.json());
       const rt=d.routes&&d.routes[0];
       if(d.code==="Ok"&&rt){
         const path=rt.geometry.coordinates.map(c=>new kakao.maps.LatLng(c[1],c[0]));
