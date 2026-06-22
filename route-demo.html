@@ -57,6 +57,8 @@ select{font-family:inherit;font-size:13px;border:1px solid var(--g300);border-ra
       <div class="pills"><span class="pill on">가산 권역</span><span class="pill">내 위치 1km</span></div></div>
     <div class="sec"><div class="lab">대상</div>
       <div class="pills"><span class="pill on" id="pMi">미접촉</span><span class="pill" id="pProg">진행중 포함</span></div></div>
+    <div class="sec"><div class="lab">이동수단</div>
+      <div class="pills"><span class="pill on" id="mCar">🚗 차량 (실도로)</span><span class="pill" id="mFoot">🚶 도보 (추정)</span></div></div>
     <div class="sec"><div class="row">
       <div><div class="lab">개수</div><select id="cnt"><option value="8">8곳</option><option value="12" selected>12곳</option><option value="20">20곳</option><option value="99">제한 없음</option></select></div>
       <div><div class="lab">우선순위</div><select id="pri"><option value="near">가까운 순</option><option value="units">호실 많은 순</option></select></div>
@@ -105,6 +107,10 @@ const COL={"미접촉":"#9aa0a6","진행중":"#c08a3a","계약":"#5f7a4a"};
 
 $("pMi").onclick=()=>$("pMi").classList.toggle("on");
 $("pProg").onclick=()=>$("pProg").classList.toggle("on");
+let MODE="차량";
+$("mCar").onclick=()=>{MODE="차량";$("mCar").classList.add("on");$("mFoot").classList.remove("on");};
+$("mFoot").onclick=()=>{MODE="도보";$("mFoot").classList.add("on");$("mCar").classList.remove("on");};
+const KKEY="eccf87b9aa3b6731a58f6ee47003ec3e";
 function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1600)}
 
 function hav(a,b){const R=6371,dLa=(b.la-a.la)*Math.PI/180,dLn=(b.ln-a.ln)*Math.PI/180,
@@ -128,14 +134,10 @@ function gen(){
    cur=rem.shift(); order.push(cur);
  }
  ROUTE=order.slice(0,cnt); done.clear();
- // 거리
- let dist=0; for(let i=1;i<ROUTE.length;i++) dist+=hav(ROUTE[i-1],ROUTE[i]);
- const mins=Math.round(ROUTE.length*5 + dist/0.067); // 체류5분 + 도보(시속4km)
  $("rttl").textContent=`가산 동선 · ${ROUTE.length}곳`;
- $("rmeta").textContent=`도보 ${dist.toFixed(1)}km · 약 ${mins}분`;
  $("setup").style.display="none"; $("result").style.display="block";
- renderList(); drawMap(); updateProg();
- window.scrollTo(0,0);
+ renderList(); updateProg(); window.scrollTo(0,0);
+ applyRoute();
 }
 
 function renderList(){
@@ -159,22 +161,50 @@ window.toggle=i=>{ done.has(i)?done.delete(i):done.add(i); renderList(); updateP
 function updateProg(){ const p=ROUTE.length?Math.round(done.size/ROUTE.length*100):0; $("prog").style.width=p+"%"; $("rcap").textContent=`가산 동선 · ${done.size}/${ROUTE.length} 완료`; }
 
 let kmap, kov=[], kline;
-function drawMap(){
- kakao.maps.load(()=>{
+function drawMarkers(){
+ kov.forEach(o=>o.setMap(null)); kov=[];
+ const bounds=new kakao.maps.LatLngBounds();
+ ROUTE.forEach((b,i)=>{
+   const pos=new kakao.maps.LatLng(b.la,b.ln); bounds.extend(pos);
+   const el=document.createElement("div");
+   el.style.cssText="width:26px;height:26px;border-radius:50%;background:#bd5f37;color:#fff;font:700 13px Pretendard;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)";
+   el.textContent=(i+1);
+   const ov=new kakao.maps.CustomOverlay({position:pos,content:el,xAnchor:.5,yAnchor:.5});
+   ov.setMap(kmap); kov.push(ov);
+ });
+ kmap.setBounds(bounds);
+}
+function drawLine(pts,color,dash){ if(kline)kline.setMap(null);
+ kline=new kakao.maps.Polyline({path:pts,strokeWeight:5,strokeColor:color,strokeOpacity:.85,strokeStyle:dash?"shortdash":"solid"});
+ kline.setMap(kmap);
+}
+function straightFallback(){
+ let dist=0; for(let i=1;i<ROUTE.length;i++) dist+=hav(ROUTE[i-1],ROUTE[i]);
+ drawLine(ROUTE.map(b=>new kakao.maps.LatLng(b.la,b.ln)),"#9aa0a6",true);
+ const mins=Math.round(ROUTE.length*5 + dist/0.067);
+ $("rmeta").textContent=`🚶 도보(추정) ${dist.toFixed(1)}km · 약 ${mins}분`;
+}
+function applyRoute(){
+ $("rmeta").textContent="경로 계산 중…";
+ kakao.maps.load(async ()=>{
    if(!kmap){ kmap=new kakao.maps.Map($("map"),{center:new kakao.maps.LatLng(37.477,126.884),level:5}); }
-   kov.forEach(o=>o.setMap(null)); kov=[]; if(kline)kline.setMap(null);
-   const path=[], bounds=new kakao.maps.LatLngBounds();
-   ROUTE.forEach((b,i)=>{
-     const pos=new kakao.maps.LatLng(b.la,b.ln); path.push(pos); bounds.extend(pos);
-     const el=document.createElement("div");
-     el.style.cssText="width:26px;height:26px;border-radius:50%;background:#bd5f37;color:#fff;font:700 13px Pretendard;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)";
-     el.textContent=(i+1);
-     const ov=new kakao.maps.CustomOverlay({position:pos,content:el,xAnchor:.5,yAnchor:.5});
-     ov.setMap(kmap); kov.push(ov);
-   });
-   kline=new kakao.maps.Polyline({path,strokeWeight:4,strokeColor:"#bd5f37",strokeOpacity:.8,strokeStyle:"solid"});
-   kline.setMap(kmap);
-   kmap.setBounds(bounds);
+   drawMarkers();
+   if(MODE==="차량" && ROUTE.length>=2){
+     try{
+       const body={origin:{x:ROUTE[0].ln,y:ROUTE[0].la},destination:{x:ROUTE[ROUTE.length-1].ln,y:ROUTE[ROUTE.length-1].la},waypoints:ROUTE.slice(1,-1).map(b=>({x:b.ln,y:b.la})),priority:"RECOMMEND"};
+       const r=await fetch("https://apis-navi.kakaomobility.com/v1/waypoints/directions",{method:"POST",headers:{Authorization:"KakaoAK "+KKEY,"Content-Type":"application/json"},body:JSON.stringify(body)});
+       const d=await r.json(); const rt=d.routes&&d.routes[0];
+       if(rt&&rt.result_code===0){
+         const path=[];
+         rt.sections.forEach(s=>s.roads&&s.roads.forEach(rd=>{for(let i=0;i<rd.vertexes.length;i+=2)path.push(new kakao.maps.LatLng(rd.vertexes[i+1],rd.vertexes[i]));}));
+         drawLine(path,"#bd5f37",false);
+         $("rmeta").textContent=`🚗 차량 ${(rt.summary.distance/1000).toFixed(1)}km · ${Math.round(rt.summary.duration/60)}분 · 실도로`;
+         $("sum").innerHTML=`총 <b>${ROUTE.length}곳</b> · 실제 도로 기준 경로`;
+         return;
+       }
+     }catch(e){}
+   }
+   straightFallback();
  });
 }
 function share(){ toast("공유 링크가 복사됐어요 (데모)"); }
