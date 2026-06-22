@@ -1,0 +1,183 @@
+<!DOCTYPE html>
+<html lang="ko"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>원터치 영업 동선 — 데모</title>
+<link rel="stylesheet" as="style" crossorigin href="https://cdn.jsdelivr.net/gh/orioncactus/pretendard@v1.3.9/dist/web/static/pretendard.min.css">
+<script src="//dapi.kakao.com/v2/maps/sdk.js?appkey=f18dc3635f475cc0dd93c44345779064&autoload=false&libraries=services"></script>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;-webkit-font-smoothing:antialiased}
+:root{--bg:#f5efe5;--panel:#fff;--line:#e7dccd;--ink:#2e2823;--mut:#8c7e6c;--clay:#bd5f37;--clay2:#974726;--green:#5f7a4a;--amber:#c08a3a;--g300:#d6c7b2}
+body{background:var(--bg);color:var(--ink);font-family:'Pretendard',sans-serif;font-size:15px;line-height:1.55;letter-spacing:-.01em}
+.wrap{max-width:480px;margin:0 auto;min-height:100vh;background:var(--bg)}
+.hd{background:var(--clay);color:#fff;padding:16px 18px}
+.hd.dark{background:#241c15}
+.hd .cap{font-size:11px;opacity:.85}
+.hd h1{font-size:18px;font-weight:700;margin-top:2px}
+.hd .meta{font-size:12px;opacity:.92;margin-top:3px}
+.bar{height:6px;background:rgba(255,255,255,.25);border-radius:99px;margin-top:10px;overflow:hidden}
+.bar i{display:block;height:100%;background:#8fc79a;width:0;transition:width .3s}
+.body{padding:16px 16px 40px}
+.sec{margin-bottom:18px}
+.lab{font-size:12px;color:var(--mut);font-weight:600;margin-bottom:8px}
+.pills{display:flex;gap:7px;flex-wrap:wrap}
+.pill{font-size:13px;padding:8px 14px;border-radius:99px;border:1px solid var(--line);background:#fff;cursor:pointer;user-select:none}
+.pill.on{background:var(--clay);color:#fff;border-color:var(--clay);font-weight:600}
+select{font-family:inherit;font-size:13px;border:1px solid var(--g300);border-radius:9px;padding:9px 11px;background:#fff;color:var(--ink);width:100%}
+.row{display:flex;gap:10px}.row>div{flex:1}
+.btn{display:block;width:100%;background:var(--clay);color:#fff;border:none;border-radius:12px;padding:14px;font-size:16px;font-weight:700;font-family:inherit;cursor:pointer;margin-top:8px;box-shadow:0 4px 12px rgba(189,95,55,.25)}
+.btn:active{transform:scale(.99)}
+.btn.ghost{background:#fff;color:var(--clay2);border:1px solid var(--line);box-shadow:none;font-size:14px;padding:11px}
+#map{width:100%;height:240px;border-bottom:1px solid var(--line)}
+.stop{display:flex;gap:11px;padding:12px 14px;border-bottom:1px solid var(--line);align-items:flex-start}
+.stop.done{opacity:.5}
+.num{flex-shrink:0;width:26px;height:26px;border-radius:50%;background:var(--clay);color:#fff;font-size:13px;font-weight:700;display:flex;align-items:center;justify-content:center;margin-top:2px}
+.stop.done .num{background:var(--green)}
+.st-b{flex:1;min-width:0}
+.st-n{font-size:14px;font-weight:600}
+.stop.done .st-n{text-decoration:line-through;color:var(--mut)}
+.st-m{font-size:12px;color:var(--mut);margin:2px 0 7px}
+.dot{font-size:12px;vertical-align:1px}
+.acts{display:flex;gap:6px}
+.mini{font-size:12px;padding:5px 10px;border-radius:8px;border:1px solid var(--line);background:#fff;color:var(--ink);cursor:pointer;text-decoration:none;display:inline-flex;align-items:center;gap:3px}
+.mini.go{background:var(--clay);color:#fff;border-color:var(--clay)}
+.cur{box-shadow:inset 0 0 0 2px var(--clay);border-radius:10px}
+.summary{padding:12px 16px;background:#fbf6ee;border-bottom:1px solid var(--line);font-size:13px;color:var(--mut)}
+.summary b{color:var(--clay2)}
+.toast{position:fixed;left:50%;transform:translateX(-50%);bottom:24px;background:#241c15;color:#fff;padding:10px 18px;border-radius:10px;font-size:13px;opacity:0;transition:.25s;pointer-events:none}
+.toast.show{opacity:1}
+.note{font-size:11px;color:var(--mut);text-align:center;margin-top:14px}
+</style></head>
+<body>
+<div class="wrap">
+
+<!-- SETUP -->
+<div id="setup">
+  <div class="hd"><div class="cap">원터치 영업 동선 · 데모</div><h1>동선 만들기</h1></div>
+  <div class="body">
+    <div class="sec"><div class="lab">범위</div>
+      <div class="pills"><span class="pill on">가산 권역</span><span class="pill">내 위치 1km</span></div></div>
+    <div class="sec"><div class="lab">대상</div>
+      <div class="pills"><span class="pill on" id="pMi">미접촉</span><span class="pill" id="pProg">진행중 포함</span></div></div>
+    <div class="sec"><div class="row">
+      <div><div class="lab">개수</div><select id="cnt"><option value="8">8곳</option><option value="12" selected>12곳</option><option value="20">20곳</option><option value="99">제한 없음</option></select></div>
+      <div><div class="lab">우선순위</div><select id="pri"><option value="near">가까운 순</option><option value="units">호실 많은 순</option></select></div>
+    </div></div>
+    <button class="btn" onclick="gen()">🧭 동선 생성</button>
+    <div class="note">데모: 실제 가산 지식산업센터 좌표로 동작합니다.</div>
+  </div>
+</div>
+
+<!-- RESULT -->
+<div id="result" style="display:none">
+  <div class="hd dark"><div class="cap" id="rcap">가산 동선</div><h1 id="rttl">동선</h1><div class="meta" id="rmeta"></div>
+    <div class="bar"><i id="prog"></i></div></div>
+  <div id="map"></div>
+  <div class="summary" id="sum"></div>
+  <div id="list"></div>
+  <div class="body" style="padding-top:14px">
+    <button class="btn ghost" onclick="share()">📨 알바에게 공유 (링크 복사)</button>
+    <button class="btn ghost" onclick="reset()">← 다시 만들기</button>
+  </div>
+</div>
+
+</div>
+<div class="toast" id="toast"></div>
+
+<script>
+const ALL=[
+ {n:"현대지식산업센터 가산퍼블릭",la:37.476439,ln:126.887332,u:1924,s:"미접촉"},
+ {n:"가산아스크타워",la:37.476724,ln:126.889777,u:914,s:"미접촉"},
+ {n:"대성 디큐브폴리스",la:37.479953,ln:126.877008,u:819,s:"미접촉"},
+ {n:"가산테라타워",la:37.474533,ln:126.889614,u:766,s:"미접촉"},
+ {n:"우림라이온스밸리",la:37.479966,ln:126.882636,u:740,s:"진행중"},
+ {n:"현대지식산업센터",la:37.468963,ln:126.895621,u:716,s:"미접촉"},
+ {n:"비젼파크",la:37.473442,ln:126.887847,u:677,s:"미접촉"},
+ {n:"에이스 가산 포휴",la:37.485073,ln:126.878884,u:667,s:"미접촉"},
+ {n:"가산어반워크1차",la:37.480021,ln:126.878016,u:657,s:"미접촉"},
+ {n:"한화비즈메트로2차",la:37.472409,ln:126.881498,u:609,s:"진행중"},
+ {n:"가산모비우스타워",la:37.482207,ln:126.876747,u:601,s:"미접촉"},
+ {n:"SKV1 AP타워",la:37.46761,ln:126.888086,u:522,s:"계약"},
+ {n:"에이스하이엔드타워클래식",la:37.474093,ln:126.888814,u:511,s:"미접촉"},
+ {n:"롯데IT캐슬",la:37.477234,ln:126.881058,u:480,s:"미접촉"}
+];
+const $=id=>document.getElementById(id);
+let ROUTE=[], done=new Set();
+const COL={"미접촉":"#9aa0a6","진행중":"#c08a3a","계약":"#5f7a4a"};
+
+$("pMi").onclick=()=>$("pMi").classList.toggle("on");
+$("pProg").onclick=()=>$("pProg").classList.toggle("on");
+function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1600)}
+
+function hav(a,b){const R=6371,dLa=(b.la-a.la)*Math.PI/180,dLn=(b.ln-a.ln)*Math.PI/180,
+ x=Math.sin(dLa/2)**2+Math.cos(a.la*Math.PI/180)*Math.cos(b.la*Math.PI/180)*Math.sin(dLn/2)**2;
+ return 2*R*Math.asin(Math.sqrt(x));}
+
+function gen(){
+ const miOnly=$("pMi").classList.contains("on") && !$("pProg").classList.contains("on");
+ let pool=ALL.filter(b=> $("pProg").classList.contains("on") ? b.s!=="계약" : (miOnly? b.s==="미접촉" : b.s!=="계약"));
+ const pri=$("pri").value, cnt=+$("cnt").value;
+ // 출발점: 호실 최다
+ let start=pool.slice().sort((a,b)=>b.u-a.u)[0];
+ // 최근접 이웃
+ let rem=pool.filter(b=>b!==start), order=[start], cur=start;
+ while(rem.length){
+   rem.sort((a,b)=>{
+     let da=hav(cur,a), db=hav(cur,b);
+     if(pri==="units"){ da/= (1+a.u/2000); db/=(1+b.u/2000); }
+     return da-db;
+   });
+   cur=rem.shift(); order.push(cur);
+ }
+ ROUTE=order.slice(0,cnt); done.clear();
+ // 거리
+ let dist=0; for(let i=1;i<ROUTE.length;i++) dist+=hav(ROUTE[i-1],ROUTE[i]);
+ const mins=Math.round(ROUTE.length*5 + dist/0.067); // 체류5분 + 도보(시속4km)
+ $("rttl").textContent=`가산 동선 · ${ROUTE.length}곳`;
+ $("rmeta").textContent=`도보 ${dist.toFixed(1)}km · 약 ${mins}분`;
+ $("setup").style.display="none"; $("result").style.display="block";
+ renderList(); drawMap(); updateProg();
+ window.scrollTo(0,0);
+}
+
+function renderList(){
+ $("sum").innerHTML=`총 <b>${ROUTE.length}곳</b> · 호실 많은 큰 건물부터 효율 순서로`;
+ $("list").innerHTML=ROUTE.map((b,i)=>{
+   const dn=done.has(i);
+   return `<div class="stop ${dn?'done':''} ${(!dn && i===firstUndone())?'cur':''}">
+     <div class="num">${dn?'✓':(i+1)}</div>
+     <div class="st-b">
+       <div class="st-n">${b.n}</div>
+       <div class="st-m"><span class="dot" style="color:${COL[b.s]}">●</span> ${b.s} · ${b.u.toLocaleString()}호</div>
+       <div class="acts">
+         <a class="mini go" href="https://map.kakao.com/link/to/${encodeURIComponent(b.n)},${b.la},${b.ln}" target="_blank" rel="noopener"><i></i>길찾기</a>
+         <span class="mini" onclick="toggle(${i})">${dn?'취소':'방문완료'}</span>
+       </div>
+     </div></div>`;
+ }).join("");
+}
+function firstUndone(){ for(let i=0;i<ROUTE.length;i++) if(!done.has(i)) return i; return -1; }
+window.toggle=i=>{ done.has(i)?done.delete(i):done.add(i); renderList(); updateProg(); };
+function updateProg(){ const p=ROUTE.length?Math.round(done.size/ROUTE.length*100):0; $("prog").style.width=p+"%"; $("rcap").textContent=`가산 동선 · ${done.size}/${ROUTE.length} 완료`; }
+
+let kmap, kov=[], kline;
+function drawMap(){
+ kakao.maps.load(()=>{
+   if(!kmap){ kmap=new kakao.maps.Map($("map"),{center:new kakao.maps.LatLng(37.477,126.884),level:5}); }
+   kov.forEach(o=>o.setMap(null)); kov=[]; if(kline)kline.setMap(null);
+   const path=[], bounds=new kakao.maps.LatLngBounds();
+   ROUTE.forEach((b,i)=>{
+     const pos=new kakao.maps.LatLng(b.la,b.ln); path.push(pos); bounds.extend(pos);
+     const el=document.createElement("div");
+     el.style.cssText="width:26px;height:26px;border-radius:50%;background:#bd5f37;color:#fff;font:700 13px Pretendard;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)";
+     el.textContent=(i+1);
+     const ov=new kakao.maps.CustomOverlay({position:pos,content:el,xAnchor:.5,yAnchor:.5});
+     ov.setMap(kmap); kov.push(ov);
+   });
+   kline=new kakao.maps.Polyline({path,strokeWeight:4,strokeColor:"#bd5f37",strokeOpacity:.8,strokeStyle:"solid"});
+   kline.setMap(kmap);
+   kmap.setBounds(bounds);
+ });
+}
+function share(){ toast("공유 링크가 복사됐어요 (데모)"); }
+function reset(){ $("result").style.display="none"; $("setup").style.display="block"; window.scrollTo(0,0); }
+</script>
+</body></html>
