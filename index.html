@@ -146,8 +146,16 @@ async function doLogin(){
 }
 async function doLogout(){ await sb.auth.signOut(); show("login") }
 
+let MYROLE='worker', MYEMAIL='';
+async function loadRole(){
+  const u=(await sb.auth.getUser()).data.user; MYEMAIL=(u&&u.email)||'';
+  try{ const p=await sb.from('profiles').select('role').eq('id',u.id).maybeSingle(); MYROLE=(p.data&&p.data.role)||'worker'; }
+  catch(e){ MYROLE='worker'; }
+}
 async function showApp(){
   show("app");
+  await loadRole();
+  if(MYROLE!=='owner'){ await showWorkerApp(); return; }   // 알바 = 일(동선) 관련만
   await loadData();
   document.querySelectorAll("#nav a").forEach(a=>a.onclick=()=>go(a.dataset.v));
   go("dash");
@@ -557,9 +565,20 @@ function showRouteResult(){
      <div id="rsum" style="padding:11px 16px;background:var(--panel2);font-size:12.5px;color:var(--mut);border-bottom:1px solid var(--line)">총 ${RROUTE.length}곳 · 호실 합계 ${totU.toLocaleString()}</div>
      <div id="rlist"></div>
    </div>
+   <button class="btn" style="margin-top:10px" onclick="assignRoute()"><i class="ti ti-user-plus"></i> 이 동선을 알바에게 배정</button>
    <button class="btn ghost sm" onclick="go('route')">← 다시 만들기</button>`;
   rmap=null; rov=[]; rline=null;   // 매번 새 #rmap에 새 지도 (재생성 시 stale map 방지)
 }
+window.assignRoute=async()=>{
+  if(!RROUTE.length){ toast("먼저 동선을 생성하세요"); return; }
+  const email=prompt("배정할 알바 이메일을 입력하세요.\n알바가 이 이메일로 앱에 로그인하면 이 동선만 보입니다(영업 데이터는 안 보임).");
+  if(!email) return;
+  const stops=RROUTE.map(b=>({building_id:b.id,name:b.n,lat:b.la,lng:b.ln,units:b.u,status:b.s}));
+  const owner=(await sb.auth.getUser()).data.user.id;
+  const z=$("rz")?$("rz").value:"";
+  const {error}=await sb.from("routes").insert({owner_id:owner,worker_email:email.trim().toLowerCase(),title:(z||"동선"),zone:z,mode:RMODE,stops,status:"active"});
+  toast(error?("배정 실패: "+error.message):("✅ 배정됨 → "+email.trim()));
+};
 function rFirstUndone(){ for(let i=0;i<RROUTE.length;i++) if(!RDONE.has(i)) return i; return -1; }
 function renderRouteList(){
   const cur=rFirstUndone();
@@ -642,6 +661,73 @@ async function applyRouteMap(){
     }catch(e){}
   }
   rStraight();
+}
+
+/* ===================== 알바 전용 화면 (일=동선만) ===================== */
+let WROUTES=[], WCUR=null, WDONE=new Set(), wmap=null, wov=[];
+async function showWorkerApp(){
+  document.querySelector(".side").style.display="none";   // 영업 메뉴 숨김
+  if(!localStorage.getItem("co_kakao")) localStorage.setItem("co_kakao","f18dc3635f475cc0dd93c44345779064"); // 지도 기본키(도메인 등록됨)
+  const V=$("view"); V.innerHTML='<div class="loading">내 동선 불러오는 중…</div>';
+  const {data,error}=await sb.from("routes").select("*").eq("status","active").order("created_at",{ascending:false});
+  if(error){ V.innerHTML='<h1>내 동선</h1><div class="box">불러오기 오류: '+error.message+'</div>'; return; }
+  WROUTES=data||[];
+  V.innerHTML=`<h1>내 동선</h1><div class="sub">${MYEMAIL} · 배정된 동선 ${WROUTES.length}개 · <span class="link" onclick="doLogout()">로그아웃</span></div>`+
+    (WROUTES.length? WROUTES.map((r,i)=>`<div class="box" style="cursor:pointer" onclick="openWRoute(${i})">
+        <div style="font-weight:700;font-size:15px">${r.title||r.zone||'동선'} · ${(r.stops||[]).length}곳</div>
+        <div class="sub" style="margin:4px 0 0">${r.zone||''} · ${r.mode||''} · ${new Date(r.created_at).toLocaleDateString()}</div>
+      </div>`).join("") : '<div class="box">아직 배정된 동선이 없습니다. 사장님이 동선을 배정하면 여기 표시됩니다.</div>');
+}
+window.openWRoute=async(i)=>{
+  WCUR=WROUTES[i]; const stops=WCUR.stops||[]; WDONE=new Set();
+  const {data:vs}=await sb.from("visits").select("building_id").eq("route_id",WCUR.id);
+  (vs||[]).forEach(v=>{const idx=stops.findIndex(s=>String(s.building_id)===String(v.building_id)); if(idx>=0)WDONE.add(idx);});
+  renderWRoute();
+};
+function renderWRoute(){
+  const stops=WCUR.stops||[];
+  $("view").innerHTML=`<div class="flex" style="justify-content:space-between"><h1>${WCUR.title||WCUR.zone||'동선'}</h1><button class="btn ghost sm" onclick="showWorkerApp()">← 목록</button></div>
+   <div class="sub">${stops.length}곳 · ${WCUR.mode||''} · 방문 <b id="wprog">${WDONE.size}/${stops.length}</b></div>
+   <div id="wmap" style="width:100%;height:300px;border:1px solid var(--line);border-radius:12px;margin-bottom:12px"></div>
+   <div id="wlist"></div>`;
+  wmap=null; wov=[];
+  renderWList(); drawWMap();
+}
+function renderWList(){
+  const stops=WCUR.stops||[];
+  $("wlist").innerHTML=stops.map((s,i)=>{const dn=WDONE.has(i);
+   return `<div class="box" style="display:flex;gap:11px;align-items:flex-start;${dn?'opacity:.55':''}">
+     <div style="flex-shrink:0;width:26px;height:26px;border-radius:50%;background:${dn?'#15803d':'#c2410c'};color:#fff;font-weight:700;display:flex;align-items:center;justify-content:center">${dn?'✓':(i+1)}</div>
+     <div style="flex:1;min-width:0">
+       <div style="font-weight:600;${dn?'text-decoration:line-through;color:var(--mut)':''}">${s.name}</div>
+       <div class="sub" style="margin:2px 0 7px">${(+s.units||0).toLocaleString()}호</div>
+       <div class="flex" style="gap:6px">
+         <a class="btn sm" style="text-decoration:none" href="https://map.kakao.com/link/to/${encodeURIComponent(s.name)},${s.lat},${s.lng}" target="_blank" rel="noopener">길찾기</a>
+         <span class="btn sm ghost" onclick="wVisit(${i})">${dn?'완료됨':'방문완료'}</span>
+       </div>
+     </div></div>`;}).join("");
+}
+window.wVisit=async(i)=>{
+  if(WDONE.has(i)) return;
+  const s=(WCUR.stops||[])[i];
+  const {error}=await sb.from("visits").insert({route_id:WCUR.id, owner_id:WCUR.owner_id, building_id:String(s.building_id||""), name:s.name, done:true});
+  if(error){ toast("저장 실패: "+error.message); return; }
+  WDONE.add(i); toast("방문 기록됨"); renderWList();
+  if($("wprog"))$("wprog").textContent=WDONE.size+"/"+(WCUR.stops||[]).length;
+};
+function drawWMap(){
+  loadKakao().then(()=>{
+    const stops=WCUR.stops||[]; if(!stops.length)return;
+    wmap=new kakao.maps.Map($("wmap"),{center:new kakao.maps.LatLng(stops[0].lat,stops[0].lng),level:5});
+    wov.forEach(o=>o.setMap(null)); wov=[];
+    const bounds=new kakao.maps.LatLngBounds();
+    stops.forEach((s,i)=>{const pos=new kakao.maps.LatLng(s.lat,s.lng); bounds.extend(pos);
+      const el=document.createElement("div");
+      el.style.cssText="width:25px;height:25px;border-radius:50%;background:#c2410c;color:#fff;font:700 12px sans-serif;display:flex;align-items:center;justify-content:center;border:2px solid #fff;box-shadow:0 1px 4px rgba(0,0,0,.4)";
+      el.textContent=(i+1);
+      const ov=new kakao.maps.CustomOverlay({position:pos,content:el,xAnchor:.5,yAnchor:.5}); ov.setMap(wmap); wov.push(ov);});
+    if(stops.length)wmap.setBounds(bounds);
+  }).catch(()=>{ if($("wmap"))$("wmap").innerHTML='<div class="loading">지도를 못 불러왔어요 — 각 항목의 길찾기 버튼을 쓰세요</div>'; });
 }
 
 boot();
