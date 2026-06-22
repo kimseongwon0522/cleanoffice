@@ -209,6 +209,7 @@ function viewDash(){
      <div class="kpi"><div class="kl">영업 대상 건물</div><div class="kv">${total}<span class="chip">대형 ${big}</span></div><div class="kx">서울 지식산업센터</div></div>
      <div class="kpi"><div class="kl">진행 중 호실</div><div class="kv">${progress}${progress?`<span class="chip">+${progress}</span>`:""}</div><div class="kx">견적·컨택 진행</div></div>
      <div class="kpi"><div class="kl">계약 호실</div><div class="kv g">${contract}${contract?`<span class="chip g">+${contract}</span>`:""}</div><div class="kx">정기청소 계약</div></div>
+     <div class="kpi"><div class="kl">전단지 배포 건물</div><div class="kv g">${Object.keys(RVISIT).length}</div><div class="kx">동선에서 방문완료</div></div>
    </div>
    <div style="display:flex;gap:14px;flex-wrap:wrap">
      <div class="box" style="flex:1.4;min-width:280px">
@@ -258,7 +259,7 @@ function renderSalesRows(){
     return `<tr><td>${b.zone}</td><td>${b.road||""}</td><td><b>${b.name}</b><div style="color:var(--mut);font-size:11px">${b.address||""}</div></td>
      <td><span class="tag ${b.size_grade}">${b.size_grade}</span></td>
      <td><b style="color:var(--blue2)">${b.units!=null?b.units+"호":"-"}</b><div style="color:var(--mut);font-size:11px">지상 ${b.floors||"-"}층</div></td>
-     <td><span class="badge">관리 <b>${a.n}</b></span> <span class="badge g">계약 <b>${a.c}</b></span></td>
+     <td><span class="badge">관리 <b>${a.n}</b></span> <span class="badge g">계약 <b>${a.c}</b></span>${RVISIT[b.id]?` <span class="badge g">전단지✓</span>`:""}</td>
      <td><button class="btn sm" onclick="go('detail','${b.id}')">상세 →</button></td></tr>`}).join("");
 }
 function zonesHtml(){
@@ -401,7 +402,8 @@ function drawPins(){
     const pos=new kakao.maps.LatLng(ll[0],ll[1]); const st=bstat(b);
     const el=document.createElement("div");
     const sz=unitSize(b.units);
-    el.style.cssText=`width:${sz}px;height:${sz}px;border-radius:50%;background:${st.c};border:2px solid #fff;box-shadow:0 1px 3px rgba(0,0,0,.4);cursor:pointer`;
+    const vis=RVISIT[b.id];
+    el.style.cssText=`width:${sz}px;height:${sz}px;border-radius:50%;background:${st.c};border:${vis?'3px solid #15803d':'2px solid #fff'};box-shadow:0 1px 3px rgba(0,0,0,.4);cursor:pointer`;
     el.title=b.name;
     el.onclick=()=>{ const a=UNITAGG[b.id]||{n:0,c:0};
       if(kInfo)kInfo.close();
@@ -410,6 +412,7 @@ function drawPins(){
           <b>${b.name}</b><br><span style="color:#999">${b.zone} · ${b.size_grade||""}</span><br>
           <span style="color:#555">총 ${b.units?b.units+"호실":"-"} · 지상 ${b.floors||"-"}층${b.floors_b?"/지하"+b.floors_b:""}</span><br>
           관리 호실 ${a.n} · 계약 ${a.c}<br>
+          ${RVISIT[b.id]?`<span style="color:#15803d;font-weight:700">전단지 배포함 (${RVISIT[b.id]})</span><br>`:""}
           <a style="color:#b45309;cursor:pointer;font-weight:700" onclick="go('detail','${b.id}')">상세 영업관리 →</a>
         </div>`});
       kInfo.open(kmap);
