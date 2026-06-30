@@ -121,7 +121,7 @@ const show=id=>{["setup","login","app"].forEach(x=>$(x).classList.toggle("hide",
 function toast(m){const t=$("toast");t.textContent=m;t.classList.add("show");setTimeout(()=>t.classList.remove("show"),1600)}
 
 function initClient(){
-  const key=localStorage.getItem("co_anon");
+  const key=localStorage.getItem("co_anon")||"sb_publishable_0fg4AX0sTTh10IimI9VJfg_ybP6o7o9";
   if(!key){show("setup");return false}
   sb=supabase.createClient(SUPABASE_URL,key);
   return true;
